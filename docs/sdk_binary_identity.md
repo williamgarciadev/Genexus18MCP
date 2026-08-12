@@ -183,6 +183,71 @@ powershell.exe -File scripts\sdk_reflection\probe_sdk_services.ps1 > services.tx
 
 then grep each reachable interface name against `src/GxMcp.Worker/`.
 
+### The Inspectors directory: 12 native importers, 1 wired
+
+Chasing `IExternalObjectInspectorService` led somewhere better than the interface itself.
+Its two methods are `LoadFrom(string inspectorsDirectory)` and `Inspectors` — it is a
+plugin *registry*, not an inspector. The value is in what it registers:
+
+```
+C:\Program Files (x86)\GeneXus\GeneXus18\Inspectors\
+    SwaggerInspector.dll        OpenAPI / Swagger   (+ 4 swagger-codegen jars)
+    Json2SDT.dll                JSON            -> SDT
+    XmlSchemaInspector.dll      XSD             -> SDT
+    WSDLInspector.dll           SOAP / WSDL     -> External Object
+    DotNetAssemblyInspector.dll .NET assembly   -> External Object
+    JavaClassInspector.dll      Java class      -> External Object
+    cURLInspector.dll           curl command    -> Procedure
+    DynTRNInspector.dll  EnterpriseInspector.dll  SketchInspector.dll
+    FontsInspector.dll   ImagesInspector.dll
+```
+
+**Exactly one of these is reachable from the MCP today**: cURL, via
+`ICurlGeneratorService` → `genexus_create action=curl_procedure`. The other eleven are
+unexposed — including JSON→SDT and Swagger→objects, which are the two an agent would reach
+for most.
+
+That existing tool is also the proven template (`Services/CurlProcService.cs:42-50`):
+
+```csharp
+var svc = SdkServiceLocator.ConstructOrResolve<GenexusServices.ICurlGeneratorService>(
+    () => new Artech.Packages.Genexus.BL.Services.CurlGeneratorService());
+svc.Generate(model, procName, description, null, curl);
+```
+
+Note the namespace/filename mismatch that makes this hard to find by searching the install
+directory: the namespace is `Artech.Packages.Genexus.BL`, but the file is
+**`Artech.Packages.GenexusBL.dll`** (no dot). `ExternalObjectInspectorService` lives in
+that same assembly — which the Worker **already references** (`csproj:115`), so wiring it
+costs no new dependency.
+
+#### The headless-safe entry point
+
+`DotNetAssemblyInspector.dll` exposes two very different types:
+
+| Type | Verdict |
+|---|---|
+| `Artech.GeneXus.Inspectors.DotNetAssemblyScanner` | **usable** — `List<ClassDefinition> GetDefinitions(string assemblyName)` and an overload taking `bool inspectUsingReflectionAssembly`. No public constructor and `base: Object`, i.e. static: callable without instantiating. |
+| `DotNetAssemblyInspector.DotNetAssemblyInspectorDialog` | **not usable headless** — derives from `System.Windows.Forms.Form`. It wraps the same work (`LoadDefinitions(fileName)`, `GetClasses()`) behind the IDE dialog. |
+
+The returned object graph is exactly what External Object authoring needs today:
+`ClassDefinition` → `MethodDefinition(MethodInfo, name, isStatic)` → `ParameterDefinition`,
+plus `ConstructorDefinition` and `FieldDefinition`.
+
+Compare with the current cost: `AuthoringService.AddExternalMember`
+(`Services/Structure/AuthoringService.cs:42-99`) is **one call per member**, and the caller
+must already know each method's name, return type, and every parameter's name and type.
+Wrapping a 50-method library means 50 calls built from documentation or guesswork. The
+scanner produces that whole graph from the DLL.
+
+Two caveats before planning work:
+
+- The inspector loads **Mono.Cecil** (`Mono.Cecil, Version=0.11.0.0`); the
+  `inspectUsingReflectionAssembly` flag switches between Cecil and plain reflection.
+- `ClassDefinition` implements `ITreeViewObject`, whose `GetTreeNode()` returns a WinForms
+  `TreeNode`. The data carriers are partially UI-coupled even though that method need
+  never be called.
+
 ### A second entry-point family: Command classes
 
 Services are not the only shape. `Artech.Genexus.Common.Commands.*` holds concrete

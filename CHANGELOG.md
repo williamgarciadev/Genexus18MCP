@@ -98,6 +98,25 @@
   `DbDriftService` currently documents as unavailable. Note that an interface and
   its implementation routinely live in different assemblies, so a per-assembly scan
   reports false negatives.
+- **The SDK ships 12 native importers under `GeneXus18\Inspectors\`, and the MCP
+  exposes one.** `SwaggerInspector` (OpenAPI), `Json2SDT` (JSON → SDT),
+  `XmlSchemaInspector` (XSD → SDT), `WSDLInspector`, `DotNetAssemblyInspector`,
+  `JavaClassInspector` and others sit unused; only `cURLInspector` is reachable,
+  through `ICurlGeneratorService` → `genexus_create action=curl_procedure`, which
+  doubles as the proven wiring template. `DotNetAssemblyScanner.GetDefinitions(path)`
+  is static and UI-free and returns the full `ClassDefinition` → `MethodDefinition`
+  → `ParameterDefinition` graph — the same graph
+  `AuthoringService.AddExternalMember` currently requires the caller to supply by
+  hand, one call per member. The dialog type in that same assembly derives from
+  `Form` and is not headless-usable. Documented with the Mono.Cecil and WinForms
+  caveats in `docs/sdk_binary_identity.md`.
+- The reflection-only resolve hook now closes over its probe directories with
+  `GetNewClosure()` and also probes `Inspectors\`. The AppDomain invokes the handler
+  after the initialising function has returned, so the previous scriptblock failed
+  with "variable cannot be retrieved because it has not been set" and silently
+  skipped dependencies. Re-running the full sweep with the fix produced an identical
+  130 reachable services, so the earlier counts stand; the difference shows up when
+  inspecting assemblies under `Inspectors\`, which the old hook never probed.
 - `SdkSurfaceProbe` enumerates `AppDomain.CurrentDomain.GetAssemblies()`, so it can
   only describe assemblies the worker has already loaded. The endpoint backlog
   derived from it therefore under-reports the SDK surface by construction; the new

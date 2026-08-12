@@ -242,18 +242,32 @@ function Initialize-ReflectionOnly {
     param([Parameter(Mandatory)][string]$GxPath)
 
     if ($script:ReflectionOnlyReady) { return }
+
+    # The AppDomain invokes this handler long after Initialize-ReflectionOnly has
+    # returned, so a plain scriptblock referencing $GxPath fails at resolve time with
+    # "variable cannot be retrieved because it has not been set" -- and each failure is a
+    # dependency that silently does not load, which turns into a missed interface or a
+    # missed implementation. Probe directories are stashed at script scope and the
+    # scriptblock is closed over with GetNewClosure() so it carries its own state.
+    $script:GxProbeDirs = @($GxPath)
+    $packages = Join-Path $GxPath 'Packages'
+    if (Test-Path -LiteralPath $packages) { $script:GxProbeDirs += $packages }
+    $inspectors = Join-Path $GxPath 'Inspectors'
+    if (Test-Path -LiteralPath $inspectors) { $script:GxProbeDirs += $inspectors }
+
+    $probeDirs = $script:GxProbeDirs
     try {
-        $handler = [System.ResolveEventHandler] {
+        $handler = [System.ResolveEventHandler]({
             param($sender, $e)
             $simple = ($e.Name -split ',')[0].Trim()
-            foreach ($dir in @($GxPath, (Join-Path $GxPath 'Packages'))) {
+            foreach ($dir in $probeDirs) {
                 $candidate = Join-Path $dir "$simple.dll"
                 if (Test-Path -LiteralPath $candidate) {
-                    return [System.Reflection.Assembly]::ReflectionOnlyLoadFrom($candidate)
+                    try { return [System.Reflection.Assembly]::ReflectionOnlyLoadFrom($candidate) } catch { }
                 }
             }
             try { return [System.Reflection.Assembly]::ReflectionOnlyLoad($e.Name) } catch { return $null }
-        }
+        }).GetNewClosure()
         [System.AppDomain]::CurrentDomain.add_ReflectionOnlyAssemblyResolve($handler)
         $script:ReflectionOnlyReady = $true
     } catch {
