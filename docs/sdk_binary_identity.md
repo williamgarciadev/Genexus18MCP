@@ -138,6 +138,51 @@ a false positive: the `.BL` sibling is already referenced (`GxMcp.Worker.csproj:
 is what `genexus_gxserver action=pipeline_*` uses. UI-side services generally do not
 resolve headless — see the "wall" table in `docs/sdk_endpoints_roadmap.md`.
 
+### The full sweep: 54 reachable services the worker does not use
+
+Running `probe_sdk_services.ps1` with no `-Assembly` filter scans all 214 family
+assemblies and finds **212 service-shaped interfaces, 130 with a known entry point**.
+Cross-referencing those 130 against `src/GxMcp.Worker/` (a name that appears nowhere in
+the worker source is unused) and dropping the IDE-shell families
+(`Artech.Architecture.UI.Framework`, `Artech.Gxpm.*`, `Genexus.Web.UI.Common`) leaves
+**54 reachable, unused services**.
+
+The important part: **most of them live in assemblies the Worker already references**
+(`Artech.Genexus.Common`, `Artech.Architecture.Common`, `Artech.Architecture.Language`),
+so there is no csproj change and no new dependency — only wiring.
+
+Highest-value picks, no new reference required:
+
+| Interface | Assembly | Why |
+|---|---|---|
+| `IExternalObjectInspectorService` | `Artech.Genexus.Common` | inspect External Objects (APIs, DLLs) — no MCP tool covers this |
+| `IDockerExecutorService` | `Artech.Genexus.Common` | containerised execution; `genexus_deploy` currently stops at the SDK's deployment targets |
+| `ILanguageService` | `Artech.Architecture.Language` | the language service itself; the assembly is referenced (`csproj:51`) but nothing in the worker touches it |
+| `IDataTypesService` | `Artech.Genexus.Common` | data-type catalogue — would back domain/attribute authoring |
+| `ISearchService` | `Artech.Architecture.Common` | the SDK's own search; the worker maintains an independent `SearchIndex` cache |
+| `IKBConversionService` | `Artech.Architecture.Common` | KB version conversion / upgrade |
+| `IHelpGeneratorService` | `Artech.Architecture.Common` | documentation generation |
+| `ITransactionsService` | `Artech.Genexus.Common` | sibling of the already-wired `ITablesService` |
+| `IParallelProcessingService` | `Artech.Genexus.Common` | the worker is single-threaded STA; worth knowing what this offers |
+| `IRestServiceDLGeneratorService`, `IODataServiceDLGeneratorService`, `IProtocolBufferServiceDLGeneratorService` | `Artech.Genexus.Common` | data-layer generation for REST / OData / protobuf services |
+
+Requiring a new csproj reference:
+
+| Interface | Assembly | Why |
+|---|---|---|
+| `IDBObjectsProvider` | `Artech.ReverseEngineering.Data` | the live DB connection `DbDriftService` documents as missing |
+| `IDynServiceProvider` | `Artech.Specifier.Helper` | OData / CosmosDB / DynamoDB query building |
+| `IGXplorerSpecifierService` | `Artech.GXplorer.Common` | GXplorer specification |
+| `IUdmConnectionManager` | `Artech.Udm.Architecture.Common` | UDM-level connection management |
+
+Reproduce the cross-reference with:
+
+```powershell
+powershell.exe -File scripts\sdk_reflection\probe_sdk_services.ps1 > services.txt
+```
+
+then grep each reachable interface name against `src/GxMcp.Worker/`.
+
 ### A second entry-point family: Command classes
 
 Services are not the only shape. `Artech.Genexus.Common.Commands.*` holds concrete
