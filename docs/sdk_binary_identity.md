@@ -240,13 +240,53 @@ must already know each method's name, return type, and every parameter's name an
 Wrapping a 50-method library means 50 calls built from documentation or guesswork. The
 scanner produces that whole graph from the DLL.
 
-Two caveats before planning work:
+#### Live result — it works, and it pops a modal dialog
+
+Invoked from a 32-bit PowerShell host against `Artech.Common.Helpers.dll`:
+
+| Call | Result |
+|---|---|
+| `GetDefinitions(dll, inspectUsingReflectionAssembly: true)` | **388** class definitions |
+| `GetDefinitions(dll, inspectUsingReflectionAssembly: false)` | **265** class definitions (loads `Mono.Cecil`) |
+
+Each `ClassDefinition` came back with `Methods`, `Constructors` and `Fields` populated. So
+the importer path is real, not theoretical.
+
+Two corrections to what static analysis suggested:
+
+- `GetDefinitions` is **not static** — it is an instance method, and the parameterless
+  constructor is **private**. The access point is the static property
+  **`DotNetAssemblyScanner.Instance`** (a singleton). Reading "no public ctor" as "static
+  class" was wrong.
+- Both overloads work headless. Cecil resolves fine from the install root.
+
+**But it raised a modal Windows dialog** when a dependency failed to resolve:
+
+```
+Error trying to load Microsoft.VisualStudio.DeviceConnectivity.Interop, Version=1.0.0.0 …
+                              [ Aceptar ]
+```
+
+That is disqualifying until handled. The worker hosts the SDK on a single STA thread with
+no user attached: a modal dialog blocks that thread forever, which is precisely the
+"SDK call silently blocks / STA thread stuck" signature the v2.40.0 wedged-worker watchdog
+exists to mitigate.
+
+The documented prevention is `UIServices.SetDisableUI(true)`
+(`docs/sdk_gx18_discovery.md:11-15`, listed as **step 1** of the bootstrap and flagged as
+vital) — and `grep -r SetDisableUI src/` returns nothing; `InitializeSdk`
+(`Program.cs:620-659`) calls `UIServices.Initialize` but never `SetDisableUI`. Filed
+upstream as issue #88. **Do not wire any Inspector-based tool before that is settled.**
+
+Remaining caveats:
 
 - The inspector loads **Mono.Cecil** (`Mono.Cecil, Version=0.11.0.0`); the
   `inspectUsingReflectionAssembly` flag switches between Cecil and plain reflection.
 - `ClassDefinition` implements `ITreeViewObject`, whose `GetTreeNode()` returns a WinForms
   `TreeNode`. The data carriers are partially UI-coupled even though that method need
   never be called.
+- The two overloads return **different counts** (388 vs 265) for the same input, so they
+  are not interchangeable — pick one deliberately and document which.
 
 ### A second entry-point family: Command classes
 
