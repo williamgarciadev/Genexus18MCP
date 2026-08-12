@@ -72,6 +72,14 @@
   The doc also writes down the already-wired per-object build/syntax chain
   (`genexus_lifecycle action=specify` and `action=build mode=compile_check`) and
   the two service-resolution idioms, both of which get repeatedly re-discovered.
+- **Syntax is validated at the write, not at `specify`** — verified live against a
+  14,988-object KB. The SDK parses the Source during `Save` **and resolves object
+  references there too**, so a missing `EndIf` (`src0057`) and a call to a
+  non-existent program (`src0287`) are both rejected in milliseconds, with exact
+  line and character, long before any specification pass runs. `specify` is for
+  what the parser cannot see. Documented with the measured evidence, including an
+  explicit note that a live `spc####`/`gen####` diagnostic was **not** reproduced —
+  three deliberately broken sources were all intercepted earlier in the pipeline.
 - `SdkSurfaceProbe` enumerates `AppDomain.CurrentDomain.GetAssemblies()`, so it can
   only describe assemblies the worker has already loaded. The endpoint backlog
   derived from it therefore under-reports the SDK surface by construction; the new

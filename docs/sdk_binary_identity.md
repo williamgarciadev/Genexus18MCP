@@ -131,6 +131,63 @@ entry-point shape (concrete classes, static helpers) and are therefore more expe
 Per-object build and syntax validation **already exist**. This is the most frequently
 re-discovered part of the codebase, so it is written down here.
 
+### Syntax is validated in TWO places, and the first one is the write
+
+This is the part that surprises people. Validation does not start at `specify` — the
+GeneXus SDK parses the Source **during `Save`**, so a syntax error never reaches the
+specifier at all:
+
+| Layer | When | Codes | Cost |
+|---|---|---|---|
+| **1. Write-time** — SDK `Save` parses the part | on every write | `src####` | immediate |
+| **2. Specify** — Spec+Gen pass | on `action=specify` / build | `spc####`, `gen####` | seconds to minutes |
+
+Measured live against a 14,988-object KB (2026-08-12), creating throwaway Procedures via
+`genexus_create action=object_atomic … validate=true rollbackOnFailure=true`. Three
+deliberately broken sources, **none of which reached the specify pass**:
+
+| Broken source | Outcome |
+|---|---|
+| `If` with no `EndIf` | `SDK Save Exception` — `src0057: Esperando o comando 'EndIf' para fechar o bloco 'If' (Source, Linha: 2, Char: 1)` |
+| `Call(ZZObjetoInexistenteXYZ)` — valid syntax, missing callee | `SDK Save Exception` — `src0287: O programa '…' não existe ou está inacessível (Source, Linha: 2, Char: 6)` |
+| `for each` with no determinable base table | `The SDK save completed, but the persisted part does not match the requested content` |
+
+What this proves:
+
+- **The write is the first validator, and it does far more than parse.** Case 2 is
+  syntactically perfect; the SDK still rejected it at `Save` because it **resolves object
+  references** during the save. Do not reach for `action=specify` to catch a missing
+  `EndIf` or a bad `Call` — the write already refused both, in milliseconds, with exact
+  line and character.
+- `validate=true` never executed in any of the three runs, because step `source` never
+  succeeded. `rollbackOnFailure=true` behaved exactly as documented: all three objects
+  were verified absent afterwards (`ObjectNotFound`), leaving the KB clean.
+- `src####` codes are classified as **specification failures** by the build-diagnostics
+  classifier added in v2.40.2 — consistent with what these errors actually are.
+- Case 3 is a different mechanism again: not a validation failure but the **persistence
+  verifier** (`TextPersistenceVerifier`, v2.40.2) refusing a save whose persisted content
+  diverged from what was requested, because GeneXus normalised it. Note that
+  `object_atomic` exposes no `verifyMode` knob — the `normalized|semantic|exact` escape
+  hatch v2.40.2 added applies to `genexus_edit mode=patch`, not to this path.
+
+> **Not verified in live testing:** an actual `spc####` / `gen####` diagnostic. Three
+> attempts were all intercepted earlier in the pipeline. Reaching the specify pass
+> requires an error the write-time validator genuinely cannot see — table-navigation and
+> specification-time failures — which needs KB-specific attributes to construct. The
+> `spc*`/`gen*` behaviour below is therefore documented **from code reading**, not from
+> live observation. Treat it accordingly.
+
+The happy path was verified in the same session: `genexus_lifecycle action=specify
+target=<Procedure>` on a healthy object returned `Succeeded`, `0 errors / 0 warnings`,
+with `buildPlan.expanded` holding exactly one object and `includeCallees: "none"` —
+confirming `Specify` does not expand the call graph. Wall clock was ~100 s, but the phase
+transitions (`InProcess-Specifying` at 6.8 s, `Specifying` at 33.8 s) show most of that
+was **cold worker start-up**, not specification.
+
+> The GeneXus model is single-threaded: the worker runs one SDK command at a time and
+> rejects (rather than queues) concurrent calls with `WorkerBusy`. Expect that whenever a
+> build, specify or a large read is in flight.
+
 ### From an MCP session
 
 | Need | Call |
