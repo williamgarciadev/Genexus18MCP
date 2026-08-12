@@ -90,19 +90,65 @@ gap by starting from the filesystem instead of the AppDomain.
 
 ## 3. Candidates for new tools
 
-Untouched assemblies exposing `I*Service` interfaces — the shape the worker already knows
-how to consume through `SdkServiceResolver` / `SdkServiceLocator`, so the cheapest path
-from "assembly exists" to "tool exists":
+### Counting `I*Service` is not a shortlist — it is a trap
 
-| Assembly | Service interfaces | Public types |
-|---|---|---:|
-| `GeneXus.Server.Contracts` | `IKBModelObjectsService`, `ISyndicationService`, `ITeamWorkService` | 58 |
-| `Artech.Editors.Common.Report` | `IIdCreationService`, `IKBObjectContextService` | 36 |
-| `Artech.Genexus.Debugx.SocketServer` | `IIMageService` | 19 |
-| `GeneXus.TeamDevClient.Architecture.UI` | `IContinuousIntegrationService` | 3 |
+The first ranking produced by `map_sdk_coverage.ps1` put `GeneXus.Server.Contracts` on
+top (3 service interfaces, 58 types). Probing it with
+`scripts/sdk_reflection/probe_sdk_services.ps1` showed it has **no concrete implementation
+anywhere in the install**: those are WCF-style contracts for a *remote* GXserver, whose
+implementation lives on the server. Ranked first, reachable never.
 
-Large untouched assemblies with **no** service interface — they would need a different
-entry-point shape (concrete classes, static helpers) and are therefore more expensive:
+The real filter is the one the worker itself applies. A service is usable only if:
+
+1. the interface implements `IGxService` → `SdkServiceResolver.Resolve<T>()`, or
+2. a concrete class implementing it has a **public parameterless constructor** →
+   `SdkServiceLocator.ConstructOrResolve<T>(() => new Impl())`.
+
+`probe_sdk_services.ps1` decides this statically. Note that an interface and its
+implementation routinely live in **different assemblies** (`ISpecifierService` is declared
+in `Artech.Genexus.Common`; the concrete `SpecifierService` ships in
+`Artech.Packages.Specifier`), so the implementation pool must be built from every family
+assembly — scanning only the assembly under test reports false negatives.
+
+### Reachable today (measured)
+
+| Interface | Assembly | Entry point | Why it matters |
+|---|---|---|---|
+| **`IDBObjectsProvider`** | `Artech.ReverseEngineering.Data` | 11 impls, all public ctor | `GetDbConnection(connString)`, `GetDbCommand`, `GetDbDataAdapter` across ODBC, SQL Server, Oracle (OLEDB + Managed), PostgreSQL, MySQL, DB2, DB2/400, Hana, Informix, generic OLEDB |
+| **`IDynServiceProvider`** | `Artech.Specifier.Helper` | `ODataServiceProvider`, `DynServiceHelperSQL` (CosmosDB), `DynServiceHelperLinq` (DynamoDB) | query/insert/update/delete builders for dynamic data stores, plus `IsValidExp` / `IsValidOptimization` validation |
+| `IWrnFixInfoProvider` | `Artech.ReverseEngineering.Core` | `ChangeTypeFixInfo`, `ChoosePKFixInfo` | `SetFixInformation(WarningFix)` — reverse-engineering warning remediation |
+
+**`IDBObjectsProvider` is the strongest lead.** `DbDriftService.cs:179` states outright
+that the table-level DDL delta "requires a live DB connection the worker doesn't open", so
+`genexus_db action=reorg_impact` can only return a verdict, never an itemised diff. This
+interface is the SDK's own mechanism for opening exactly that connection, with a provider
+per engine. Closing that gap is a concrete, well-scoped tool.
+
+### Reachable on paper, blocked in practice
+
+| Interface | Assembly | Blocker |
+|---|---|---|
+| `IIdCreationService`, `IKBObjectContextService` | `Artech.Editors.Common.Report` | impls exist (`Artech.Packages.ReportEditor.Services.*`) but have **no public parameterless ctor** |
+| `IStencilProvider` | `GeneXus.DesignOps.DesignToGxml` | impl `DesignFileReader.Visitors.StencilVisitor`, no public ctor |
+| `IScreenSpecManager` | `Artech.Specifier.Helper` | no concrete impl found |
+| `IKBModelObjectsService`, `ISyndicationService`, `ITeamWorkService` | `GeneXus.Server.Contracts` | remote GXserver contracts; no local impl |
+
+Also treat **`GeneXus.TeamDevClient.Architecture.UI`** (`IContinuousIntegrationService`) as
+a false positive: the `.BL` sibling is already referenced (`GxMcp.Worker.csproj:107`) and
+is what `genexus_gxserver action=pipeline_*` uses. UI-side services generally do not
+resolve headless — see the "wall" table in `docs/sdk_endpoints_roadmap.md`.
+
+### A second entry-point family: Command classes
+
+Services are not the only shape. `Artech.Genexus.Common.Commands.*` holds concrete
+`*Command` classes invoked directly rather than resolved from a registry — for example
+`Artech.Genexus.Common.Commands.CSSGen.GenerateCssForMainObjectCommand(BuildArgs,
+IObjectListCommand…)`. An interface-only census misses these entirely; run
+`probe_sdk_services.ps1 -CommandClasses` to enumerate them.
+
+### Large untouched assemblies with no service interface
+
+Higher cost — they need a different entry-point shape — but non-trivial surface:
 
 | Assembly | Public types | Note |
 |---|---:|---|
@@ -110,19 +156,12 @@ entry-point shape (concrete classes, static helpers) and are therefore more expe
 | `Artech.K2B.Common` | 657 | K2B pattern family |
 | `Artech.Gxpm.Interop` | 365 | BPM |
 | `Artech.Generator.SmartDevices` | 317 | |
-| `Artech.Specifier.Helper` | 98 | adjacent to the specification chain (§4) |
-| `Artech.ReverseEngineering.Core` | 95 | |
+| `GeneXus.DesignOps.FigmaModel` / `SketchModel` / `DesignToGxml` | 148 / 92 / 57 | design-file import |
+| `Artech.Wiki.Services` | 51 | |
 
-**Vet each candidate before planning work.** Two known traps:
-
-- **`GeneXus.TeamDevClient.Architecture.UI`** exposes `IContinuousIntegrationService`, but
-  the `.BL` sibling — already referenced (`GxMcp.Worker.csproj:107`) — is what
-  `genexus_gxserver action=pipeline_*` uses. The UI-side services generally do not resolve
-  in a headless worker; see the "wall" table in `docs/sdk_endpoints_roadmap.md`. Likely a
-  false positive.
-- A service interface existing does **not** mean it resolves. Many are not registered in
-  the headless service registry and need `SdkServiceLocator.ConstructOrResolve<T>()` with a
-  concrete implementation constructed by hand (`Helpers/SdkServiceLocator.cs:40`).
+> **Static analysis only.** A verdict of Resolver/Locator proves an entry point exists,
+> not that the service initialises in a headless worker. Several services resolve on paper
+> and still fail at runtime. Treat the shortlist as candidates to try, not as promises.
 
 ---
 

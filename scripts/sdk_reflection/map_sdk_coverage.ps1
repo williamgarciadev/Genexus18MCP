@@ -130,32 +130,6 @@ function Get-ProbeSeenAssemblies {
 # --------------------------------------------------------------------------------------
 # Service-interface census (the actual "is there a tool in here?" signal)
 # --------------------------------------------------------------------------------------
-$script:ReflectionOnlyReady = $false
-
-function Initialize-ReflectionOnly {
-    param([Parameter(Mandatory)][string]$GxPath)
-
-    # Without a resolve hook, GetTypes() on a reflection-only assembly throws
-    # ReflectionTypeLoadException for nearly every dependency and the census collapses.
-    try {
-        $handler = [System.ResolveEventHandler] {
-            param($sender, $e)
-            $simple = ($e.Name -split ',')[0].Trim()
-            foreach ($dir in @($GxPath, (Join-Path $GxPath 'Packages'))) {
-                $candidate = Join-Path $dir "$simple.dll"
-                if (Test-Path -LiteralPath $candidate) {
-                    return [System.Reflection.Assembly]::ReflectionOnlyLoadFrom($candidate)
-                }
-            }
-            try { return [System.Reflection.Assembly]::ReflectionOnlyLoad($e.Name) } catch { return $null }
-        }
-        [System.AppDomain]::CurrentDomain.add_ReflectionOnlyAssemblyResolve($handler)
-        $script:ReflectionOnlyReady = $true
-    } catch {
-        Write-Verbose "ReflectionOnly resolve hook unavailable: $($_.Exception.Message)"
-    }
-}
-
 function Get-ServiceCensus {
     <#
         Counts public service interfaces (I*Service) and concrete *Service classes.

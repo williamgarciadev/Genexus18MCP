@@ -226,6 +226,65 @@ function Get-PeInfo {
     }
 }
 
+$script:ReflectionOnlyReady = $false
+
+function Initialize-ReflectionOnly {
+    <#
+        Installs a ReflectionOnlyAssemblyResolve hook that probes the GeneXus install root
+        and Packages\. Without it, GetTypes() on a reflection-only assembly throws
+        ReflectionTypeLoadException for nearly every dependency and any type census
+        collapses to noise.
+
+        Sets $script:ReflectionOnlyReady. Reflection-only load is .NET Framework only, so
+        on PowerShell 7 this reports false and callers must degrade explicitly.
+    #>
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][string]$GxPath)
+
+    if ($script:ReflectionOnlyReady) { return }
+    try {
+        $handler = [System.ResolveEventHandler] {
+            param($sender, $e)
+            $simple = ($e.Name -split ',')[0].Trim()
+            foreach ($dir in @($GxPath, (Join-Path $GxPath 'Packages'))) {
+                $candidate = Join-Path $dir "$simple.dll"
+                if (Test-Path -LiteralPath $candidate) {
+                    return [System.Reflection.Assembly]::ReflectionOnlyLoadFrom($candidate)
+                }
+            }
+            try { return [System.Reflection.Assembly]::ReflectionOnlyLoad($e.Name) } catch { return $null }
+        }
+        [System.AppDomain]::CurrentDomain.add_ReflectionOnlyAssemblyResolve($handler)
+        $script:ReflectionOnlyReady = $true
+    } catch {
+        Write-Verbose "ReflectionOnly resolve hook unavailable: $($_.Exception.Message)"
+    }
+}
+
+function Test-ReflectionOnlyReady { return $script:ReflectionOnlyReady }
+
+function Get-PublicTypesSafe {
+    <#
+        Public types of a reflection-only assembly, tolerating partial type loads the same
+        way SdkSurfaceProbe does. Returns an empty array rather than throwing.
+    #>
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][string]$FilePath)
+
+    if (-not $script:ReflectionOnlyReady) { return @() }
+    try {
+        $asm = [System.Reflection.Assembly]::ReflectionOnlyLoadFrom($FilePath)
+        try {
+            return @($asm.GetTypes() | Where-Object { $_.IsPublic })
+        } catch [System.Reflection.ReflectionTypeLoadException] {
+            return @($_.Exception.Types | Where-Object { $_ -ne $null -and $_.IsPublic })
+        }
+    } catch {
+        Write-Verbose "type load failed for ${FilePath}: $($_.Exception.Message)"
+        return @()
+    }
+}
+
 function Get-AssemblyIdentity {
     <#
         Strong-name identity via GetAssemblyName. This reads metadata without loading the

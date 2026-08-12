@@ -80,6 +80,24 @@
   what the parser cannot see. Documented with the measured evidence, including an
   explicit note that a live `spc####`/`gen####` diagnostic was **not** reproduced —
   three deliberately broken sources were all intercepted earlier in the pipeline.
+- **`scripts/sdk_reflection/probe_sdk_services.ps1`** answers the question that
+  follows the coverage map: of the services in an unexplored assembly, which are
+  actually *reachable*? It applies the worker's own two criteria statically —
+  does the interface implement `IGxService` (→ `SdkServiceResolver`), or does a
+  concrete impl have a public parameterless ctor (→
+  `SdkServiceLocator.ConstructOrResolve`) — and reports the rest as blocked, with
+  the reason. `-CommandClasses` additionally enumerates the concrete `*Command`
+  entry-point family that an interface-only census misses.
+- **Counting `I*Service` interfaces ranks candidates badly.** `GeneXus.Server.Contracts`
+  topped the naive ranking with three service interfaces and turns out to have no
+  concrete implementation anywhere in the install — they are contracts for a remote
+  GXserver. Conversely the strongest lead found, `IDBObjectsProvider`
+  (`Artech.ReverseEngineering.Data`), ships 11 implementations with public
+  constructors covering ODBC, SQL Server, Oracle, PostgreSQL, MySQL, DB2, DB2/400,
+  Hana and Informix — the SDK's own way to open the live database connection that
+  `DbDriftService` currently documents as unavailable. Note that an interface and
+  its implementation routinely live in different assemblies, so a per-assembly scan
+  reports false negatives.
 - `SdkSurfaceProbe` enumerates `AppDomain.CurrentDomain.GetAssemblies()`, so it can
   only describe assemblies the worker has already loaded. The endpoint backlog
   derived from it therefore under-reports the SDK surface by construction; the new
