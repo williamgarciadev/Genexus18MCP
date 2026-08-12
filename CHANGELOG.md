@@ -50,6 +50,35 @@
 - **Higiene incremental de CI e análise estática.** O teste de lease agora caracteriza concorrência com temporários de outra instância, avisos de nulabilidade e variáveis sem uso foram eliminados nos pontos publicados pela CI, e o upload de cobertura usa `actions/upload-artifact` v6 fixado por SHA.
 - **Zero-warning test hygiene and async task execution.** Converted blocking `.Wait()` / `.Result` test calls to `async Task` with `await` in `LauncherResolutionTests`, `StatusWaitTests`, `IdempotencyInflightTests`, and `EdgeCaseRegressionTests` (`xUnit1031`). Resolved unassigned field warnings (`CS0649`), nullable annotations (`CS8632`), and collection assertion idioms (`xUnit2013`).
 - **Codebase architectural deepening plan executed.** Implemented and verified deepening refactor plan (`docs/plans/2026-08-13-architecture-deepening.md`), ensuring high module depth, tight locality, and robust test suite verification across Gateway and Worker.
+- **SDK binary identity and coverage tooling** — two read-only PowerShell scripts
+  under `scripts/sdk_reflection/`, sharing helpers in `_gx_common.ps1`.
+  `identify_gx_binary.ps1` establishes what `GeneXus.exe` is (managed-vs-native
+  verdict, COR20 platform flags, CLR runtime, referenced assemblies, and a
+  managed/native inventory of the install directory) by parsing the PE/CLI headers
+  instead of loading the assembly, so it works on both PowerShell editions and can
+  classify hundreds of DLLs cheaply. `map_sdk_coverage.ps1` cross-references every
+  managed GeneXus-family DLL on disk against the Worker csproj references and the
+  `docs/sdk-probe/INDEX.md` assembly table, then ranks the never-inspected ones by
+  exposed `I*Service` interfaces. Both resolve the install path through
+  `GX_PROGRAM_DIR` → `GX_PATH` → `config.json` → default and report which source
+  won, rather than hardcoding it the way the sibling scripts in that folder do.
+- **`docs/sdk_binary_identity.md`** records the measurements against GeneXus
+  `18.0.13.55666`: `GeneXus.exe` is C# on .NET Framework 4.7.1, strong-named, and
+  **AnyCPU/32-bit-preferred** — not x86-only, since `32BITREQUIRED` and
+  `32BITPREFERRED` are both set (`0x0002000B`); reading only the first bit is a
+  common misdiagnosis. The install ships 374 top-level DLLs (344 managed / 30
+  native, 109 `Artech.*`). Of 215 managed GeneXus-family assemblies the Worker
+  references 18, another 51 load transitively, and 146 have never been inspected.
+  The doc also writes down the already-wired per-object build/syntax chain
+  (`genexus_lifecycle action=specify` and `action=build mode=compile_check`) and
+  the two service-resolution idioms, both of which get repeatedly re-discovered.
+- `SdkSurfaceProbe` enumerates `AppDomain.CurrentDomain.GetAssemblies()`, so it can
+  only describe assemblies the worker has already loaded. The endpoint backlog
+  derived from it therefore under-reports the SDK surface by construction; the new
+  coverage map starts from the filesystem to close that blind spot.
+- `Microsoft.Build.Utilities.Core` is absent from the GeneXus 18.0.13 install, so
+  its `Condition="Exists(…)"` reference in `GxMcp.Worker.csproj` never applies —
+  silently, because the csproj also suppresses `MSB3277`.
 
 ## v2.41.0 - 2026-08-13
 
