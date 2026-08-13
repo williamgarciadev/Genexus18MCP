@@ -117,10 +117,15 @@
   skipped dependencies. Re-running the full sweep with the fix produced an identical
   130 reachable services, so the earlier counts stand; the difference shows up when
   inspecting assemblies under `Inspectors\`, which the old hook never probed.
-- `SdkSurfaceProbe` enumerates `AppDomain.CurrentDomain.GetAssemblies()`, so it can
-  only describe assemblies the worker has already loaded. The endpoint backlog
-  derived from it therefore under-reports the SDK surface by construction; the new
-  coverage map starts from the filesystem to close that blind spot.
+- `SdkSurfaceProbe` enumerated `AppDomain.CurrentDomain.GetAssemblies()`, so until
+  v2.41.0 it could only describe assemblies the worker had already loaded, and the
+  endpoint backlog derived from it under-reported the SDK surface by construction.
+  That measurement is what opened [#87](https://github.com/lennix1337/Genexus18MCP/issues/87),
+  fixed in v2.41.0 by pre-loading SDK assemblies from disk before the probe runs.
+  The coverage map still starts from the filesystem, in a separate process and with
+  reflection-only loads, so it remains an independent control on whether that preload
+  actually closes the gap: the probe now reports what it managed to `Assembly.LoadFrom`,
+  which is not the same thing as what is on disk.
 - `Microsoft.Build.Utilities.Core` is absent from the GeneXus 18.0.13 install, so
   its `Condition="Exists(…)"` reference in `GxMcp.Worker.csproj` never applies —
   silently, because the csproj also suppresses `MSB3277`.
