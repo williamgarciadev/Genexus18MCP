@@ -2,54 +2,8 @@
 
 ## Unreleased
 
-## v2.41.3 - 2026-08-15
-
-### Changed
-
-- **99.97% latency cut & 0 B allocation in Gateway legacy tool resolution (`McpRouter.TryRewriteLegacyTool`).** Converted `TryRewriteLegacyTool` to evaluate matching cases lazily in [`McpRouter.cs`](file:///C:/Projetos/Genexus18MCP/src/GxMcp.Gateway/McpRouter.cs). On normal non-legacy tool calls (`genexus_query`, `genexus_read`, `genexus_edit`), latency dropped from 244.8 ns to 4.1 ns (-98.3%), and on large edit payloads from 14.18 μs to 3.89 ns (-99.97%, 3,646x speedup), completely eliminating all heap allocations (0 B allocated).
-- **Zero-clone canonicalization in `IdempotencyMiddleware`.** Replaced the full `args.DeepClone()` in [`IdempotencyMiddleware.cs`](file:///C:/Projetos/Genexus18MCP/src/GxMcp.Gateway/IdempotencyMiddleware.cs) with root-level property skipping inside `JsonCanonicalize`, eliminating object tree duplication during SHA256 mutation payload hashing.
-- **Zero-reflection JSON envelope construction in Worker `SearchService`.** Replaced `JObject.FromObject(new { ... })` anonymous type serialization with direct `JArray`/`JObject` construction across exact-match and ranked search paths in [`SearchService.cs`](file:///C:/Projetos/Genexus18MCP/src/GxMcp.Worker/Services/SearchService.cs), eliminating runtime reflection overhead and intermediate anonymous objects.
-- **Zero-allocation dispatch scopes in Worker command lifecycle.** Reused static `NoopDisposable` instances for null tokens in [`WorkerCancellationRegistry.cs`](file:///C:/Projetos/Genexus18MCP/src/GxMcp.Worker/Helpers/WorkerCancellationRegistry.cs) and [`ProgressContext.cs`](file:///C:/Projetos/Genexus18MCP/src/GxMcp.Worker/Helpers/ProgressContext.cs), and eliminated redundant `.ToLower()` string allocations before case-insensitive lookup in [`CommandDispatcher.cs`](file:///C:/Projetos/Genexus18MCP/src/GxMcp.Worker/Services/CommandDispatcher.cs).
-- **54% latency cut & 55% memory reduction in Gateway envelope projection.** Streamlined [`NormalizeToolPayloadForAxi`](file:///C:/Projetos/Genexus18MCP/src/GxMcp.Gateway/Program.ToolPayload.cs) and [`ProjectArrayItems`](file:///C:/Projetos/Genexus18MCP/src/GxMcp.Gateway/Program.ToolPayload.cs) to project array items directly without full intermediate object tree cloning, eliminated redundant `DeepClone()` on `result["structuredContent"]`, and optimized `BuildTotalsByType` with single-lookup dictionary updates. `CompactProjection_500Rows` latency dropped from 500 μs to 230 μs (-54%), heap allocations decreased from 1.7 MB to 775 KB (-55%), and Gen0/Gen1 GC collections were reduced by >53%.
-- **Zero-allocation fast structural pre-check in `TruncateResponseIfNeeded`.** Added structural pre-filtering in [`Program.ToolPayload.cs`](file:///C:/Projetos/Genexus18MCP/src/GxMcp.Gateway/Program.ToolPayload.cs) before computing full-tree JSON string serializations, bypassing unconditional string serialization on sub-budget tool responses (whoami, status, inspect, short reads, mutations).
-- **Allocation-free `DidYouMean.Levenshtein` & candidate length pruning.** Replaced heap array allocations in [`DidYouMean.cs`](file:///C:/Projetos/Genexus18MCP/src/GxMcp.Gateway/DidYouMean.cs) with stackalloc `Span<int>` buffers and added candidate length-delta filtering in `DidYouMean.Suggest`. Levenshtein distance calculations now allocate 0 bytes on the heap (215 ns), and non-matching suggestion lookups execute in 17.7 ns.
-- **Optimized type lookups and aggregations in Worker `ListService`.** Replaced inline type array instantiations in `ListService.IsLikelyType` with a static frozen `HashSet<string>` and streamlined `ComputeAggregates` to use single-pass `TryGetValue` updates.
-
-## v2.41.2 - 2026-08-14
-
-### Added
-
-- **Multi-target batched build via `BuildWithTheseOnly` on `includeCallees=none`.** When `genexus_lifecycle action=build` receives multiple comma-separated targets and `includeCallees=none`, the worker routes all targets to `IBuildServiceBL.BuildWithTheseOnly` in a single shared specification and MSBuild compilation pipeline, avoiding N sequential `BuildOne` cycles. Fixes [#96](https://github.com/lennix1337/Genexus18MCP/issues/96).
-
-### Fixed
-
-- **Lifecycle router forwards `dryRun` and `deploy` parameters.** `SystemRouter` and `CommandDispatcher` now forward `dryRun` and `deploy` across `build`, `rebuild`, `specify`, and `compile_check` actions, ensuring preview validation and deploy options are respected by the worker. Fixes [#96](https://github.com/lennix1337/Genexus18MCP/issues/96).
-- **`SdkSurfaceProbe` surfaces warning when GeneXus path does not resolve.** Instead of silently returning when the GeneXus installation directory is missing, `SdkSurfaceProbe.TryPreloadSdkAssemblies` now appends an explicit warning to `result.Warnings` indicating the skipped path and noting that only pre-loaded AppDomain assemblies are scanned. Fixes [#94](https://github.com/lennix1337/Genexus18MCP/issues/94).
-- **Preserved content and snapshot verification on object moves in `genexus_properties action=move`.** Move operations capture all GeneXus parts and properties before moving, prioritize non-destructive `EntityManager.UpdateParent`, validate the snapshot within the SDK transaction, and perform independent post-commit verification. Thanks to [@davidagostini](https://github.com/davidagostini) — see PR [#95](https://github.com/lennix1337/Genexus18MCP/pull/95).
-
 ### Internal
 
-- **Worker local test isolation and coverage strengthening.** Worker tests isolate local SDK assembly resolution from NuGet-provided dependencies and maintain explicit coverage thresholds across Gateway and Worker. Thanks to [@williamgarciadev](https://github.com/williamgarciadev), [@danielkrueger](https://github.com/danielkrueger), and [@davidagostini](https://github.com/davidagostini) — see PR [#93](https://github.com/lennix1337/Genexus18MCP/pull/93).
-
-## v2.41.1 - 2026-08-13
-
-### Changed
-
-- **O(1) dictionary key resolution in `SearchService` exact-match.** Replaced full O(N) `Objects.Values` iteration with direct dictionary probe on `typeFilter:name` in [`SearchService.cs`](file:///C:/Projetos/Genexus18MCP/src/GxMcp.Worker/Services/SearchService.cs#L102), making exact name queries instantaneous on large Knowledge Bases.
-- **Pre-computed static caching for `tools/list` discovery.** Eliminated expensive per-call `DeepClone()` of the full tool definitions array in [`McpRouter.cs`](file:///C:/Projetos/Genexus18MCP/src/GxMcp.Gateway/McpRouter.cs). Added `Cache-Control: public, max-age=3600` response headers on discovery endpoints in [`Program.Http.cs`](file:///C:/Projetos/Genexus18MCP/src/GxMcp.Gateway/Program.Http.cs) adhering to the 2026-07-28 MCP specification.
-- **Event-driven STA message pump in Worker dispatching.** Replaced timer-only polling with immediate `BeginInvoke` event-driven queue draining in [`Program.cs`](file:///C:/Projetos/Genexus18MCP/src/GxMcp.Worker/Program.cs), reducing internal dispatch latency from 15ms to 0ms.
-- **Deepened mutation and patch subsystem inside `WriteService`.** Encapsulates the `PatchService` lifecycle and eliminates redundant per-call instantiations during `genexus_edit` patch mode.
-
-### Fixed
-
-- **`genexus_properties action=move` now preserves and verifies the complete object.** The move captures every GeneXus part and authored property before mutation, prefers the non-destructive `EntityManager.UpdateParent` path, validates the snapshot inside the SDK transaction, and performs an independent post-commit re-read. `dryRun` is non-persistent, `baseVersion` rejects concurrent changes, and any divergence with `rollbackOnFailure=true` restores the original parent and content. Responses expose saved/persisted/verified state, requested and persisted hashes, rollback evidence, and confirm that no lifecycle operation ran.
-
-### Internal
-
-- **Testes locais do Worker agora carregam o SDK GeneXus configurado sem preparação manual.** O projeto de testes copia para sua saída apenas as dependências ausentes do `GX_PATH`, preservando as versões fornecidas por NuGet; a coleta completa de cobertura U16 volta a executar os 1.912 cenários. Os pisos são explícitos por componente (Gateway 60%, Worker 45%), sem exclusões ou testes desativados.
-- **Higiene incremental de CI e análise estática.** O teste de lease agora caracteriza concorrência com temporários de outra instância, avisos de nulabilidade e variáveis sem uso foram eliminados nos pontos publicados pela CI, e o upload de cobertura usa `actions/upload-artifact` v6 fixado por SHA.
-- **Zero-warning test hygiene and async task execution.** Converted blocking `.Wait()` / `.Result` test calls to `async Task` with `await` in `LauncherResolutionTests`, `StatusWaitTests`, `IdempotencyInflightTests`, and `EdgeCaseRegressionTests` (`xUnit1031`). Resolved unassigned field warnings (`CS0649`), nullable annotations (`CS8632`), and collection assertion idioms (`xUnit2013`).
-- **Codebase architectural deepening plan executed.** Implemented and verified deepening refactor plan (`docs/plans/2026-08-13-architecture-deepening.md`), ensuring high module depth, tight locality, and robust test suite verification across Gateway and Worker.
 - **SDK binary identity and coverage tooling** — two read-only PowerShell scripts
   under `scripts/sdk_reflection/`, sharing helpers in `_gx_common.ps1`.
   `identify_gx_binary.ps1` establishes what `GeneXus.exe` is (managed-vs-native
@@ -129,6 +83,55 @@
 - `Microsoft.Build.Utilities.Core` is absent from the GeneXus 18.0.13 install, so
   its `Condition="Exists(…)"` reference in `GxMcp.Worker.csproj` never applies —
   silently, because the csproj also suppresses `MSB3277`.
+
+## v2.41.3 - 2026-08-15
+
+### Changed
+
+- **99.97% latency cut & 0 B allocation in Gateway legacy tool resolution (`McpRouter.TryRewriteLegacyTool`).** Converted `TryRewriteLegacyTool` to evaluate matching cases lazily in [`McpRouter.cs`](file:///C:/Projetos/Genexus18MCP/src/GxMcp.Gateway/McpRouter.cs). On normal non-legacy tool calls (`genexus_query`, `genexus_read`, `genexus_edit`), latency dropped from 244.8 ns to 4.1 ns (-98.3%), and on large edit payloads from 14.18 μs to 3.89 ns (-99.97%, 3,646x speedup), completely eliminating all heap allocations (0 B allocated).
+- **Zero-clone canonicalization in `IdempotencyMiddleware`.** Replaced the full `args.DeepClone()` in [`IdempotencyMiddleware.cs`](file:///C:/Projetos/Genexus18MCP/src/GxMcp.Gateway/IdempotencyMiddleware.cs) with root-level property skipping inside `JsonCanonicalize`, eliminating object tree duplication during SHA256 mutation payload hashing.
+- **Zero-reflection JSON envelope construction in Worker `SearchService`.** Replaced `JObject.FromObject(new { ... })` anonymous type serialization with direct `JArray`/`JObject` construction across exact-match and ranked search paths in [`SearchService.cs`](file:///C:/Projetos/Genexus18MCP/src/GxMcp.Worker/Services/SearchService.cs), eliminating runtime reflection overhead and intermediate anonymous objects.
+- **Zero-allocation dispatch scopes in Worker command lifecycle.** Reused static `NoopDisposable` instances for null tokens in [`WorkerCancellationRegistry.cs`](file:///C:/Projetos/Genexus18MCP/src/GxMcp.Worker/Helpers/WorkerCancellationRegistry.cs) and [`ProgressContext.cs`](file:///C:/Projetos/Genexus18MCP/src/GxMcp.Worker/Helpers/ProgressContext.cs), and eliminated redundant `.ToLower()` string allocations before case-insensitive lookup in [`CommandDispatcher.cs`](file:///C:/Projetos/Genexus18MCP/src/GxMcp.Worker/Services/CommandDispatcher.cs).
+- **54% latency cut & 55% memory reduction in Gateway envelope projection.** Streamlined [`NormalizeToolPayloadForAxi`](file:///C:/Projetos/Genexus18MCP/src/GxMcp.Gateway/Program.ToolPayload.cs) and [`ProjectArrayItems`](file:///C:/Projetos/Genexus18MCP/src/GxMcp.Gateway/Program.ToolPayload.cs) to project array items directly without full intermediate object tree cloning, eliminated redundant `DeepClone()` on `result["structuredContent"]`, and optimized `BuildTotalsByType` with single-lookup dictionary updates. `CompactProjection_500Rows` latency dropped from 500 μs to 230 μs (-54%), heap allocations decreased from 1.7 MB to 775 KB (-55%), and Gen0/Gen1 GC collections were reduced by >53%.
+- **Zero-allocation fast structural pre-check in `TruncateResponseIfNeeded`.** Added structural pre-filtering in [`Program.ToolPayload.cs`](file:///C:/Projetos/Genexus18MCP/src/GxMcp.Gateway/Program.ToolPayload.cs) before computing full-tree JSON string serializations, bypassing unconditional string serialization on sub-budget tool responses (whoami, status, inspect, short reads, mutations).
+- **Allocation-free `DidYouMean.Levenshtein` & candidate length pruning.** Replaced heap array allocations in [`DidYouMean.cs`](file:///C:/Projetos/Genexus18MCP/src/GxMcp.Gateway/DidYouMean.cs) with stackalloc `Span<int>` buffers and added candidate length-delta filtering in `DidYouMean.Suggest`. Levenshtein distance calculations now allocate 0 bytes on the heap (215 ns), and non-matching suggestion lookups execute in 17.7 ns.
+- **Optimized type lookups and aggregations in Worker `ListService`.** Replaced inline type array instantiations in `ListService.IsLikelyType` with a static frozen `HashSet<string>` and streamlined `ComputeAggregates` to use single-pass `TryGetValue` updates.
+
+## v2.41.2 - 2026-08-14
+
+### Added
+
+- **Multi-target batched build via `BuildWithTheseOnly` on `includeCallees=none`.** When `genexus_lifecycle action=build` receives multiple comma-separated targets and `includeCallees=none`, the worker routes all targets to `IBuildServiceBL.BuildWithTheseOnly` in a single shared specification and MSBuild compilation pipeline, avoiding N sequential `BuildOne` cycles. Fixes [#96](https://github.com/lennix1337/Genexus18MCP/issues/96).
+
+### Fixed
+
+- **Lifecycle router forwards `dryRun` and `deploy` parameters.** `SystemRouter` and `CommandDispatcher` now forward `dryRun` and `deploy` across `build`, `rebuild`, `specify`, and `compile_check` actions, ensuring preview validation and deploy options are respected by the worker. Fixes [#96](https://github.com/lennix1337/Genexus18MCP/issues/96).
+- **`SdkSurfaceProbe` surfaces warning when GeneXus path does not resolve.** Instead of silently returning when the GeneXus installation directory is missing, `SdkSurfaceProbe.TryPreloadSdkAssemblies` now appends an explicit warning to `result.Warnings` indicating the skipped path and noting that only pre-loaded AppDomain assemblies are scanned. Fixes [#94](https://github.com/lennix1337/Genexus18MCP/issues/94).
+- **Preserved content and snapshot verification on object moves in `genexus_properties action=move`.** Move operations capture all GeneXus parts and properties before moving, prioritize non-destructive `EntityManager.UpdateParent`, validate the snapshot within the SDK transaction, and perform independent post-commit verification. Thanks to [@davidagostini](https://github.com/davidagostini) — see PR [#95](https://github.com/lennix1337/Genexus18MCP/pull/95).
+
+### Internal
+
+- **Worker local test isolation and coverage strengthening.** Worker tests isolate local SDK assembly resolution from NuGet-provided dependencies and maintain explicit coverage thresholds across Gateway and Worker. Thanks to [@williamgarciadev](https://github.com/williamgarciadev), [@danielkrueger](https://github.com/danielkrueger), and [@davidagostini](https://github.com/davidagostini) — see PR [#93](https://github.com/lennix1337/Genexus18MCP/pull/93).
+
+## v2.41.1 - 2026-08-13
+
+### Changed
+
+- **O(1) dictionary key resolution in `SearchService` exact-match.** Replaced full O(N) `Objects.Values` iteration with direct dictionary probe on `typeFilter:name` in [`SearchService.cs`](file:///C:/Projetos/Genexus18MCP/src/GxMcp.Worker/Services/SearchService.cs#L102), making exact name queries instantaneous on large Knowledge Bases.
+- **Pre-computed static caching for `tools/list` discovery.** Eliminated expensive per-call `DeepClone()` of the full tool definitions array in [`McpRouter.cs`](file:///C:/Projetos/Genexus18MCP/src/GxMcp.Gateway/McpRouter.cs). Added `Cache-Control: public, max-age=3600` response headers on discovery endpoints in [`Program.Http.cs`](file:///C:/Projetos/Genexus18MCP/src/GxMcp.Gateway/Program.Http.cs) adhering to the 2026-07-28 MCP specification.
+- **Event-driven STA message pump in Worker dispatching.** Replaced timer-only polling with immediate `BeginInvoke` event-driven queue draining in [`Program.cs`](file:///C:/Projetos/Genexus18MCP/src/GxMcp.Worker/Program.cs), reducing internal dispatch latency from 15ms to 0ms.
+- **Deepened mutation and patch subsystem inside `WriteService`.** Encapsulates the `PatchService` lifecycle and eliminates redundant per-call instantiations during `genexus_edit` patch mode.
+
+### Fixed
+
+- **`genexus_properties action=move` now preserves and verifies the complete object.** The move captures every GeneXus part and authored property before mutation, prefers the non-destructive `EntityManager.UpdateParent` path, validates the snapshot inside the SDK transaction, and performs an independent post-commit re-read. `dryRun` is non-persistent, `baseVersion` rejects concurrent changes, and any divergence with `rollbackOnFailure=true` restores the original parent and content. Responses expose saved/persisted/verified state, requested and persisted hashes, rollback evidence, and confirm that no lifecycle operation ran.
+
+### Internal
+
+- **Testes locais do Worker agora carregam o SDK GeneXus configurado sem preparação manual.** O projeto de testes copia para sua saída apenas as dependências ausentes do `GX_PATH`, preservando as versões fornecidas por NuGet; a coleta completa de cobertura U16 volta a executar os 1.912 cenários. Os pisos são explícitos por componente (Gateway 60%, Worker 45%), sem exclusões ou testes desativados.
+- **Higiene incremental de CI e análise estática.** O teste de lease agora caracteriza concorrência com temporários de outra instância, avisos de nulabilidade e variáveis sem uso foram eliminados nos pontos publicados pela CI, e o upload de cobertura usa `actions/upload-artifact` v6 fixado por SHA.
+- **Zero-warning test hygiene and async task execution.** Converted blocking `.Wait()` / `.Result` test calls to `async Task` with `await` in `LauncherResolutionTests`, `StatusWaitTests`, `IdempotencyInflightTests`, and `EdgeCaseRegressionTests` (`xUnit1031`). Resolved unassigned field warnings (`CS0649`), nullable annotations (`CS8632`), and collection assertion idioms (`xUnit2013`).
+- **Codebase architectural deepening plan executed.** Implemented and verified deepening refactor plan (`docs/plans/2026-08-13-architecture-deepening.md`), ensuring high module depth, tight locality, and robust test suite verification across Gateway and Worker.
 
 ## v2.41.0 - 2026-08-13
 
