@@ -1241,6 +1241,79 @@ namespace GxMcp.Worker.Services
             return result;
         }
 
+        /// <summary>
+        /// Per-field population census over <paramref name="scope"/> (the whole index when null).
+        /// Single O(n) in-memory pass, no SDK: on a 14.9k-object index this is sub-millisecond.
+        ///
+        /// This is what lets a caller distinguish "the KB has none" from "we have not looked yet"
+        /// — see CoverageSnapshot for the vocabulary. HasPendingEnrichment() above answers the
+        /// same question as a yes/no early-exit; this answers it with numbers, per field, so a
+        /// response can state exactly which of its sections are trustworthy.
+        /// </summary>
+        public CoverageSnapshot GetCoverageSnapshot(IEnumerable<SearchIndex.IndexEntry> scope = null)
+        {
+            var snap = new CoverageSnapshot();
+
+            IEnumerable<SearchIndex.IndexEntry> entries = scope;
+            if (entries == null)
+            {
+                var idx = GetIndex();
+                if (idx?.Objects == null) return snap;
+                entries = idx.Objects.Values;
+            }
+
+            var folderPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var counts = snap.PopulatedByField;
+
+            foreach (var e in entries)
+            {
+                if (e == null) continue;
+                snap.ObjectsInScope++;
+
+                if (!string.IsNullOrWhiteSpace(e.Name)) Bump(counts, "name");
+                if (!string.IsNullOrWhiteSpace(e.Type)) Bump(counts, "type");
+                if (!string.IsNullOrWhiteSpace(e.Guid)) Bump(counts, "guid");
+                if (!string.IsNullOrWhiteSpace(e.Description)) Bump(counts, "description");
+                if (!string.IsNullOrWhiteSpace(e.LastModifiedBy)) Bump(counts, "lastModifiedBy");
+                if (e.LastUpdate != default(DateTime)) Bump(counts, "lastUpdate");
+
+                if (!string.IsNullOrWhiteSpace(e.Module)) Bump(counts, "module");
+
+                // Placement: ParentPath is the resolved value. ParentFolderPath is NOT a second
+                // opinion — ComposeParentFolderPath turns an empty ParentPath into the literal
+                // "Root Module", so counting it would report 100% coverage on an index where
+                // nothing was ever resolved. Count the real one, and track how many distinct
+                // folder values exist so a caller can detect the synthesized single-bucket case.
+                if (!string.IsNullOrWhiteSpace(e.ParentPath))
+                {
+                    Bump(counts, "parentPath");
+                    snap.StructureResolvedInScope++;
+                }
+                if (!string.IsNullOrWhiteSpace(e.ParentFolderPath)) folderPaths.Add(e.ParentFolderPath);
+
+                if (e.Calls != null && e.Calls.Count > 0) Bump(counts, "calls");
+                if (e.CalledBy != null && e.CalledBy.Count > 0) Bump(counts, "calledBy");
+                if (e.Tables != null && e.Tables.Count > 0) Bump(counts, "tables");
+
+                // Same authoritative signal HasPendingEnrichment/GetUnenrichedEntries use:
+                // UpdateEntry always writes a 128-float embedding, lite stubs never carry one.
+                if (e.Embedding != null && e.Embedding.Length > 0)
+                {
+                    Bump(counts, "embedding");
+                    snap.EnrichedInScope++;
+                }
+            }
+
+            snap.DistinctFolderPaths = folderPaths.Count;
+            return snap;
+        }
+
+        private static void Bump(Dictionary<string, int> counts, string field)
+        {
+            int n;
+            counts[field] = counts.TryGetValue(field, out n) ? n + 1 : 1;
+        }
+
         /// <summary>Current high-water-mark as a DateTime (MinValue if none observed).</summary>
         public DateTime CurrentHighWaterMark
         {

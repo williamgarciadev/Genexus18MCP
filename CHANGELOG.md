@@ -4,6 +4,20 @@
 
 ### Internal
 
+- **Index coverage census (`IndexCacheService.GetCoverageSnapshot`).** A single
+  in-memory pass, no SDK, that reports per field how much of a scope actually
+  carries a value — and, critically, what an *absent* value means for that field.
+  `CoverageSnapshot.TrustOf` answers in four levels: `complete` (written for every
+  object), `observed:<pct>` (a cheap pass attempted all of them, so absence is a
+  fact about the KB), `partial:<pct>` (enrichment-only, so absence means "not read
+  yet" and must never be reasoned over) and `unavailable`. Placement is counted
+  from the resolved `ParentPath`, never from `ParentFolderPath`: the latter is
+  composed from the former and falls back to the literal `"Root Module"`, so
+  counting it reports 100% coverage on an index where nothing was ever resolved.
+  Measured on a 14,932-object KB, that distinction is the difference between
+  "no callers" and "we have not looked": `Calls` was populated for 0 objects and
+  `Module` for 1, while `ParentFolderPath` was populated for all 14,932 with a
+  single distinct value.
 - **SDK binary identity and coverage tooling** — two read-only PowerShell scripts
   under `scripts/sdk_reflection/`, sharing helpers in `_gx_common.ps1`.
   `identify_gx_binary.ps1` establishes what `GeneXus.exe` is (managed-vs-native
