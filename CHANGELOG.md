@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+### Fixed
+
+- **The folder tree was fabricated: every object reported `Root Module`.** An object's
+  placement — `Module`, `ParentPath`, `Path` — was written only by enrichment, and under
+  the default lazy enrichment most objects are never enriched, so placement stayed empty
+  and `ParentFolderPath` fell back to the synthesized literal `"Root Module"` for
+  everything. Measured on a 14,932-object KB: `Module` was populated for **1** object,
+  and all 14,932 reported the same single folder — on a KB that actually contains 90
+  Modules and 304 Folders. Anything reading placement (`genexus_list_objects pathPrefix`,
+  the module tables in the KB readme) was therefore filtering and grouping against a flat
+  tree that does not exist.
+  The lite index pass now resolves placement inline, where it already holds the object
+  handle and needs no extra SDK open. On a 3,321-object KB this populated 32 distinct
+  Modules and 109 distinct parent paths **with zero objects enriched**. Cost measured at
+  ~1.58 ms/object (against ~31 ms/object for enrichment), reported as `hierarchyMs` in the
+  `[LITE-WALK]` log line so it stays observable per KB. Run
+  `genexus_lifecycle action=index force=true` once to rebuild an existing index with real
+  placement. Set `Indexing.LitePassResolvesHierarchy=false` in `App.config` to restore the
+  previous behaviour.
+
 ### Internal
 
 - **Index coverage census (`IndexCacheService.GetCoverageSnapshot`).** A single

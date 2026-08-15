@@ -152,6 +152,48 @@ namespace GxMcp.Worker.Tests
             Assert.Equal(100d, scoped.EnrichedPct);   // 100% of the SCOPE, not of the KB
         }
 
+        /// <summary>
+        /// The state the lite walk now produces, and which used to be impossible: placement is
+        /// resolved for every object while nothing is enriched. Before Indexing.LitePassResolvesHierarchy
+        /// the two travelled together — both were written only by enrichment — so "no module" and
+        /// "no callers" were the same fact. They are not, and coverage must report them apart:
+        /// the tree is trustworthy, the call graph is not.
+        /// </summary>
+        [Fact]
+        public void StructureResolvedWithoutEnrichment_IsTrustedTreeButUntrustedEdges()
+        {
+            var svc = new IndexCacheService();
+            var entries = LiteFixture(60);
+            for (int i = 0; i < entries.Count; i++)
+            {
+                entries[i].Module = (i % 3 == 0) ? "Payment" : "Flow";
+                entries[i].ParentPath = entries[i].Module;
+                entries[i].ParentFolderPath = "Root Module/" + entries[i].Module;
+                // Embedding stays null: NOT enriched.
+            }
+            svc.LoadFromEntries(entries);
+
+            var snap = svc.GetCoverageSnapshot();
+
+            Assert.Equal(60, snap.StructureResolvedInScope);
+            Assert.Equal(100d, snap.StructureResolvedPct);
+            Assert.Equal(0, snap.EnrichedInScope);
+            Assert.True(snap.DistinctFolderPaths > 1);
+
+            // The tree can be drawn...
+            Assert.False(snap.ShouldSuppress("folderPath", 60d));
+            // ...while the call graph still must not be.
+            Assert.True(snap.ShouldSuppress("calledBy", 60d));
+        }
+
+        [Fact]
+        public void LitePassResolvesHierarchy_DefaultsToOn()
+        {
+            // A regression guard on the decision, not on the plumbing: leaving this off is what
+            // makes every tool read a fabricated "Root Module"-only folder tree.
+            Assert.True(GxMcp.Worker.Configuration.LitePassResolvesHierarchy);
+        }
+
         [Fact]
         public void EmptyScope_IsUnavailableNotComplete()
         {

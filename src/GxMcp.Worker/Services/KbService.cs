@@ -599,7 +599,7 @@ namespace GxMcp.Worker.Services
                     Logger.Info($"[LITE-ENUM] elapsedMs={enumSw.ElapsedMilliseconds}");
 
                     var liteEntries = new List<SearchIndex.IndexEntry>();
-                    long readTicks = 0, flushTicks = 0;
+                    long readTicks = 0, flushTicks = 0, hierarchyTicks = 0;
                     // value: [0]=accumulated read ticks, [1]=object count
                     var typeBuckets = new Dictionary<string, long[]>(StringComparer.Ordinal);
 
@@ -632,6 +632,29 @@ namespace GxMcp.Worker.Services
                         // Fase 1: track the delta baseline (max LastUpdate) during the walk.
                         if (lu != DateTime.MinValue) _indexCacheService.ObserveLastUpdate(lu);
 
+                        // Resolve placement here, where the KBObject is already in hand.
+                        // Otherwise it is written only by enrichment, which under the default
+                        // LazyEnrichment most objects never reach — leaving Module empty and
+                        // every entry reporting the synthesized folder "Root Module", i.e. a
+                        // fabricated flat tree. Measured at ~1.58 ms/object (vs ~31 ms/object
+                        // for enrichment) and it opens no objects. Timed into its own
+                        // accumulator so the cost stays visible in [LITE-WALK] on any KB.
+                        // Kill-switch: Indexing.LitePassResolvesHierarchy=false.
+                        string hModule = null, hParentPath = null, hPath = null;
+                        if (Configuration.LitePassResolvesHierarchy)
+                        {
+                            long hStart = Stopwatch.GetTimestamp();
+                            try
+                            {
+                                var h = _indexCacheService.ResolveHierarchy(obj);
+                                hModule = h.ModuleName;
+                                hParentPath = h.ParentPath;
+                                hPath = h.Path;
+                            }
+                            catch { }
+                            hierarchyTicks += Stopwatch.GetTimestamp() - hStart;
+                        }
+
                         liteEntries.Add(new SearchIndex.IndexEntry
                         {
                             Guid = obj.Guid.ToString(),
@@ -641,6 +664,11 @@ namespace GxMcp.Worker.Services
                             LastUpdate = lu,
                             CreatedAt = ca,
                             LastModifiedBy = lub,
+                            // Left null when the flag is off: NormalizeLegacyHierarchy fills the
+                            // legacy fallbacks on load, so behaviour is unchanged in that case.
+                            Module = hModule,
+                            ParentPath = hParentPath,
+                            Path = hPath,
                             IsEnriched = false
                         });
 
@@ -721,7 +749,10 @@ namespace GxMcp.Worker.Services
                     // if it ~= elapsedMs the COM property reads dominate (and the walk is
                     // STA-bound, not parallelizable); flushMs is the in-loop snapshot cost.
                     double tickToMs = 1000.0 / Stopwatch.Frequency;
-                    Logger.Info($"[LITE-WALK] readMs={(long)(readTicks * tickToMs)} flushMs={(long)(flushTicks * tickToMs)} objects={_totalCount}");
+                    // hierarchyMs is reported separately (and is 0 when the flag is off) so the
+                    // added cost of resolving placement in-line can be compared run-to-run
+                    // rather than estimated.
+                    Logger.Info($"[LITE-WALK] readMs={(long)(readTicks * tickToMs)} flushMs={(long)(flushTicks * tickToMs)} hierarchyMs={(long)(hierarchyTicks * tickToMs)} hierarchyOn={Configuration.LitePassResolvesHierarchy} objects={_totalCount}");
                     // Per-type counts + time, sorted desc by total read time, so we can see
                     // which object type dominates (e.g. Attributes on a large KB).
                     string typeBreakdown = string.Join(" ", typeBuckets

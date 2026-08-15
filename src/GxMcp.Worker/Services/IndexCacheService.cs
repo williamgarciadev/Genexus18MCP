@@ -819,7 +819,11 @@ namespace GxMcp.Worker.Services
             MarkDirtyForKey(removedKey);
         }
 
-        private (string ParentName, string ParentPath, string Path, string ModuleName) ResolveHierarchy(global::Artech.Architecture.Common.Objects.KBObject obj)
+        // internal (was private): the lite walk in KbService already holds a materialised
+        // KBObject, so it can resolve placement in-line instead of deferring it to
+        // enrichment. Gated by Configuration.LitePassResolvesHierarchy while the added
+        // cost is being measured.
+        internal (string ParentName, string ParentPath, string Path, string ModuleName) ResolveHierarchy(global::Artech.Architecture.Common.Objects.KBObject obj)
         {
             // PERFORMANCE (W-M5): fast-path for objects whose hierarchy has already been resolved.
             if (obj != null && _hierarchyCache.TryGetValue(obj.Guid, out var cached))
