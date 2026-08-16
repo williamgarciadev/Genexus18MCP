@@ -1001,6 +1001,8 @@ namespace GxMcp.Gateway
                     return "BEFORE marking a Smart Device object as Main, claiming an 'IsMain' property exists, or setting Native Mobile application-level properties — confirm the real name (it's 'Main program') and which object types support it.";
                 case "webpanel-events":
                     return "BEFORE writing Web Panel event code (Start / Refresh / Load) — confirm the firing order and what attribute access each event has. Refresh runs BEFORE Load (per record), not after.";
+                case "clean-architecture":
+                    return "MANDATORY team standard — read BEFORE writing or reviewing ANY GeneXus code for this team, then run genexus_analyze mode=linter on every touched object and satisfy the Definition of Done (no Critical/Error, no unjustified Warning) before declaring a task complete.";
                 default:
                     return "Read before invoking related properties or methods you aren't fully certain about.";
             }

@@ -30,12 +30,93 @@ namespace GxMcp.Gateway.Tests
         [Fact]
         public void CuratedKeysArePresent()
         {
-            // These four are the LLM-anti-hallucination minimum for v2.8.0.
+            // The first four are the LLM-anti-hallucination minimum for v2.8.0;
+            // clean-architecture is the team's mandatory coding standard.
             var keys = SkillCatalog.All.Select(e => e.Key).ToHashSet(System.StringComparer.OrdinalIgnoreCase);
             Assert.Contains("navigation", keys);
             Assert.Contains("gam-integrated-security", keys);
             Assert.Contains("sd-panel-mobile", keys);
             Assert.Contains("webpanel-events", keys);
+            Assert.Contains("clean-architecture", keys);
+        }
+
+        /// <summary>
+        /// The honesty is the value. The whole point of this standard is that it does NOT
+        /// pretend GeneXus has classes/inheritance/interfaces — it translates what it can and
+        /// says outright which SOLID letter does not apply (Liskov). A future edit that dilutes
+        /// that admission into generic SOLID prose would turn the document into cargo cult;
+        /// this test makes that edit go red.
+        /// </summary>
+        [Fact]
+        public void CleanArchitectureSkill_DeclaresGeneXusIsNotOOP()
+        {
+            var ca = SkillCatalog.FindByKey("clean-architecture");
+            Assert.NotNull(ca);
+            Assert.Contains("no es un lenguaje orientado a objetos", ca.Body);
+            Assert.Contains("Liskov", ca.Body);
+            Assert.Contains("NO aplica", ca.Body);
+        }
+
+        /// <summary>
+        /// The concrete numbers the linter enforces and the doc teaches must be the SAME story:
+        /// the 80-line procedure limit (GX014), the canonical parm() signature (what GX012's
+        /// message prescribes), single commit ownership (GX001's concept), and the blocking
+        /// Definition of Done. If the doc and the linter drift apart, developers get told two
+        /// different standards and trust dies — this pins the shared facts.
+        /// </summary>
+        [Fact]
+        public void CleanArchitectureSkill_PinsTheTeamLimits()
+        {
+            var ca = SkillCatalog.FindByKey("clean-architecture");
+            Assert.NotNull(ca);
+            // Size limits (§2-S) and the rule that enforces the procedure one.
+            Assert.Contains("80", ca.Body);
+            Assert.Contains("150", ca.Body);
+            Assert.Contains("GX014", ca.Body);
+            // Canonical signature, exactly as the linter messages spell it.
+            Assert.Contains("out:&Resultado, out:&Mensajes", ca.Body);
+            // Single owner of the Commit.
+            Assert.Contains("Commit on Exit = No", ca.Body);
+            Assert.Contains("GX001", ca.Body);
+            // The smells the linter enforces are named with their codes.
+            Assert.Contains("GX012", ca.Body);
+            Assert.Contains("GX015", ca.Body);
+            // The Definition of Done is a brake, not a suggestion.
+            Assert.Contains("bloqueante", ca.Body);
+            Assert.Contains("GXnnn-justified", ca.Body);
+        }
+
+        /// <summary>
+        /// The body is embedded from docs/clean-architecture-genexus.md at build time (docs/
+        /// does not travel in publish.zip; the assembly does). This test proves the embedding
+        /// worked AND that the assembly copy matches the repo doc — the single-source-of-truth
+        /// guarantee. If someone edits the .md and the test runs against a stale build, the
+        /// mismatch surfaces here instead of shipping silently.
+        /// </summary>
+        [Fact]
+        public void CleanArchitectureSkill_BodyLoadsFromEmbeddedResource_AndMatchesRepoDoc()
+        {
+            var ca = SkillCatalog.FindByKey("clean-architecture");
+            Assert.NotNull(ca);
+            Assert.False(ca.Body.StartsWith("ERROR:"), "embedded resource failed to load: " + ca.Body);
+
+            // Locate the repo doc the way ContractGoldenHarness locates fixtures: walk up.
+            string dir = System.AppContext.BaseDirectory;
+            string docPath = null;
+            for (int i = 0; i < 10; i++)
+            {
+                var candidate = System.IO.Path.Combine(dir, "docs", "clean-architecture-genexus.md");
+                if (System.IO.File.Exists(candidate)) { docPath = candidate; break; }
+                var parent = System.IO.Directory.GetParent(dir);
+                if (parent == null) break;
+                dir = parent.FullName;
+            }
+            Assert.False(docPath == null, "could not locate docs/clean-architecture-genexus.md from " + System.AppContext.BaseDirectory);
+
+            string repoDoc = System.IO.File.ReadAllText(docPath);
+            // Normalize line endings and BOM: the embedding preserves bytes, git may not.
+            static string Norm(string s) => s.Replace("\r\n", "\n").TrimStart('﻿').Trim();
+            Assert.Equal(Norm(repoDoc), Norm(ca.Body));
         }
 
         [Fact]

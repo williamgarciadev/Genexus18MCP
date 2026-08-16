@@ -93,6 +93,15 @@ namespace GxMcp.Worker.Services
                                 CheckDirectTableAccess(cleanContent, issues, content, uiPartName);
                             if (rawPartName == "Procedure" || rawPartName == "Source")
                                 CheckSubroutines(cleanContent, issues, content, uiPartName);
+                            // GX014 fires on Procedures only: the 80-useful-lines limit is the
+                            // team standard for a *main procedure* (WebPanels have their own,
+                            // higher limit that needs role inference we don't have yet).
+                            if (obj is Procedure && (rawPartName == "Procedure" || rawPartName == "Source"))
+                                CheckLongProcedureSource(content, issues, uiPartName);
+                            // GX015 needs the ORIGINAL content — it lives off the comments that
+                            // StripComments erases. Generated-region exclusion happens inside
+                            // the detector (DVelop [Start]/[End] markers, verified live).
+                            CheckCommentedOutCode(content, issues, uiPartName);
                         }
                     }
                     else if (part is VariablesPart varPart)
@@ -177,15 +186,63 @@ namespace GxMcp.Worker.Services
 
         private void CheckDirectTableAccess(string cleanCode, JArray issues, string originalCode, string partName)
         {
-            // Only relevant for UI objects like WebPanels where direct access is discouraged in some architectures
+            // Only relevant for UI objects like WebPanels where direct access is discouraged in some architectures.
+            // Severity was Info until 2026-08: at Info this got ignored, and every new developer
+            // copied the For Each from the previous screen — exactly the snowball the team
+            // standard exists to stop. Warning means "requires a written justification"
+            // (// GX012-justified: <reason>) under the standard's severity policy.
+            // The hasPatternInstance suppression at the call site stays: WWP+ prescribes direct
+            // access in its generated Event Start, and flagging the generator is noise.
             if (partName.Equals("Events", StringComparison.OrdinalIgnoreCase))
             {
                 var forEachBlocks = Regex.Matches(cleanCode, @"(?is)\bfor\s+each\b\s*.*?\s*\bendfor\b", RegexOptions.Compiled);
                 foreach (Match m in forEachBlocks)
                 {
                     int line = GetLineNumber(originalCode, m.Index);
-                    issues.Add(CreateIssue("GX012", "Direct Table Access in UI", "Info", "Direct 'For Each' in UI events detected. Consider using Data Providers for better separation of concerns.", "For Each", line, partName));
+                    issues.Add(CreateIssue("GX012", "Direct Table Access in UI", "Warning", "Direct 'For Each' in UI events. Per team standard, UI objects delegate data access to a Procedure or Data Provider with the canonical signature parm(in:&Sdt, out:&Result, out:&Messages). See genexus://kb/skills/clean-architecture.", "For Each", line, partName));
                 }
+            }
+        }
+
+        // Team limit for a main Procedure: 80 useful code lines (non-blank after comment
+        // stripping — the definition lives in CodeMetricsExtractor.CountCodeLines, next to the
+        // regexes it depends on). The number comes from the team's written standard (see
+        // docs/clean-architecture-genexus.md §2-S); the other role limits there (validation 60,
+        // save 50, interop 30) need role inference we don't have, so only this one is enforced.
+        private const int MaxProcedureCodeLines = 80;
+
+        private void CheckLongProcedureSource(string originalCode, JArray issues, string partName)
+        {
+            int codeLines = CodeMetricsExtractor.CountCodeLines(originalCode);
+            if (codeLines > MaxProcedureCodeLines)
+            {
+                issues.Add(CreateIssue(
+                    "GX014",
+                    "Long Procedure Source",
+                    "Warning",
+                    $"Procedure Source has {codeLines} useful code lines (team limit for a main procedure: {MaxProcedureCodeLines}). Extract responsibilities into dedicated Procedures — validation <=60, save <=50, interop <=30 lines. See genexus://kb/skills/clean-architecture.",
+                    "Source",
+                    1,
+                    partName));
+            }
+        }
+
+        private void CheckCommentedOutCode(string originalCode, JArray issues, string partName)
+        {
+            // One issue per block, anchored at the block's first line. Thresholds are the
+            // detector's defaults (>10 consecutive comment lines, >=60% of them code-like);
+            // the block boundaries, prose-vs-code discrimination and generated-region
+            // exclusions are all pinned by CommentedCodeDetectorTests.
+            foreach (var f in CommentedCodeDetector.Detect(originalCode))
+            {
+                issues.Add(CreateIssue(
+                    "GX015",
+                    "Commented-Out Code Block",
+                    "Warning",
+                    $"Block of {f.LineCount} consecutive commented-out code lines (more than 10). Dead code belongs to version-control history, not to the Source. Delete it — Git (or the KB's object versioning) remembers it for you.",
+                    "// dead code",
+                    f.StartLine,
+                    partName));
             }
         }
 

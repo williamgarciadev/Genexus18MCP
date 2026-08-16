@@ -27,6 +27,12 @@
       "uri": "genexus://kb/llm-playbook"
     },
     {
+      "description": "MANDATORY team coding standard: SOLID translated honestly to non-OOP GeneXus, ACID/LUW rules, size limits per object, canonical parm() signature, and the code-smell catalog the linter enforces (GX012/GX014/GX015). Read before writing or reviewing any GeneXus code.",
+      "mimeType": "text/markdown",
+      "name": "Clean Code & SOLID adaptado a GeneXus 18 (estándar del equipo)",
+      "uri": "genexus://kb/skills/clean-architecture"
+    },
+    {
       "description": "How to enable GAM, the **Integrated Security Level** property, where it applies, and how Authorization vs Authentication differ.",
       "mimeType": "text/markdown",
       "name": "GAM (GeneXus Access Manager) — Integrated Security",

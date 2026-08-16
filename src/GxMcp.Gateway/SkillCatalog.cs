@@ -300,7 +300,42 @@ Applicable to:
 
 > Source: docs.genexus.com — Refresh event (8195)."
             },
+            new Entry
+            {
+                Key = "clean-architecture",
+                Title = "Clean Code & SOLID adaptado a GeneXus 18 (estándar del equipo)",
+                Description = "MANDATORY team coding standard: SOLID translated honestly to non-OOP GeneXus, ACID/LUW rules, size limits per object, canonical parm() signature, and the code-smell catalog the linter enforces (GX012/GX014/GX015). Read before writing or reviewing any GeneXus code.",
+                // Unlike the four entries above, this body is NOT inline: it is the team's
+                // normative document, maintained as docs/clean-architecture-genexus.md and
+                // embedded into this assembly at build time (see the <EmbeddedResource> item
+                // in GxMcp.Gateway.csproj). Single source of truth: editing the standard is
+                // editing that .md — docs/ does not travel in publish.zip, the binary does.
+                Body = LoadEmbeddedBody("GxMcp.Gateway.Skills.clean-architecture.md")
+            },
         };
+
+        // Loads a skill body embedded at build time. Materialized ONCE at type initialization
+        // (this is a static field initializer), so consumers see a plain string exactly like
+        // the inline entries. Failure yields an explicit error body rather than null/empty:
+        // SkillCatalogTests asserts bodies are >= 400 chars and cite docs.genexus.com, so a
+        // missing resource fails tests loudly instead of shipping an empty skill.
+        private static string LoadEmbeddedBody(string logicalName)
+        {
+            try
+            {
+                var asm = typeof(SkillCatalog).Assembly;
+                using var stream = asm.GetManifestResourceStream(logicalName);
+                if (stream == null)
+                    return "ERROR: embedded skill resource '" + logicalName + "' not found in assembly. " +
+                           "The <EmbeddedResource> item for docs/clean-architecture-genexus.md is missing from GxMcp.Gateway.csproj.";
+                using var reader = new System.IO.StreamReader(stream, System.Text.Encoding.UTF8);
+                return reader.ReadToEnd();
+            }
+            catch (System.Exception ex)
+            {
+                return "ERROR: failed to load embedded skill resource '" + logicalName + "': " + ex.Message;
+            }
+        }
 
         public static Entry FindByKey(string key)
         {

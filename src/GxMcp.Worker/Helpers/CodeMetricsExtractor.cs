@@ -41,6 +41,31 @@ namespace GxMcp.Worker.Helpers
             return m;
         }
 
+        /// <summary>
+        /// Lines that carry actual code: non-blank after stripping line and block comments.
+        /// This is the number the team's size limits are written against ("a main Procedure
+        /// stays under 80 useful lines" — see docs/clean-architecture-genexus.md §2-S and
+        /// linter rule GX014), so the definition lives here, next to the comment-stripping
+        /// regexes it depends on, rather than being re-derived by each caller.
+        /// </summary>
+        public static int CountCodeLines(string source)
+        {
+            if (string.IsNullOrEmpty(source)) return 0;
+
+            // Same stripping order as Extract: block comments first (they may span lines and
+            // hide // sequences), then line comments. Replacing a block comment with " "
+            // leaves its lines blank, so they fall out of the count below.
+            string code = RxBlockComment.Replace(source, " ");
+            code = RxLineComment.Replace(code, "");
+
+            int count = 0;
+            foreach (var line in code.Split('\n'))
+            {
+                if (line.Trim().Length > 0) count++;
+            }
+            return count;
+        }
+
         private static int CountNestedForEach(string code)
         {
             int depth = 0, nested = 0;

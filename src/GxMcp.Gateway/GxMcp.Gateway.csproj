@@ -41,6 +41,11 @@
     <PackageReference Include="System.Security.Permissions" Version="10.0.3" />
   </ItemGroup>
   <ItemGroup>
+    <!-- The team coding standard ships INSIDE the assembly: docs/ is not part of
+         publish.zip, so embedding is what makes genexus://kb/skills/clean-architecture
+         work on machines that only ever receive the binaries. SkillCatalog loads it by
+         this LogicalName; keep the two in sync. -->
+    <EmbeddedResource Include="..\..\docs\clean-architecture-genexus.md" LogicalName="GxMcp.Gateway.Skills.clean-architecture.md" />
     <None Include="..\..\config.sample.json" Link="config.json">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
