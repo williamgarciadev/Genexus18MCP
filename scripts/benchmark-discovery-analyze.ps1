@@ -12,7 +12,7 @@ param(
 #   callers + summary), explain, apply_pattern (diagnose), doctor.
 
 $ErrorActionPreference = "Stop"
-$gateway = "C:\Projetos\Genexus18MCP\publish\GxMcp.Gateway.exe"
+$gateway = "C:\Projetos\Genexus18MCP\publish\GxMcp18.Gateway.exe"
 $env:GX_CONFIG_PATH = "C:\Projetos\Genexus18MCP\config.json"
 $env:GX_MCP_STDIO = "true"
 $logDir = "C:\Projetos\Genexus18MCP\.gx-smoke-futures"

@@ -151,7 +151,7 @@ Write-Host "   > Writing sanitized fallback config.json to publish..."
 $defaultConfig = @{
     GeneXus = @{
         InstallationPath = "C:\\Program Files (x86)\\GeneXus\\GeneXus18"
-        WorkerExecutable = "$publishDir\\worker\\GxMcp.Worker.exe"
+        WorkerExecutable = "$publishDir\\worker\\GxMcp18.Worker.exe"
     }
     Server = @{
         HttpPort = 5000
@@ -189,7 +189,7 @@ if not defined GX_CONFIG_PATH (
 set "GX_MCP_STDIO=true"
 
 rem Launch the gateway exe that lives alongside this bat file.
-set "GATEWAY_EXE=%BAT_DIR%\GxMcp.Gateway.exe"
+set "GATEWAY_EXE=%BAT_DIR%\GxMcp18.Gateway.exe"
 if exist "%GATEWAY_EXE%" (
   "%GATEWAY_EXE%"
   exit /b %ERRORLEVEL%
@@ -217,8 +217,8 @@ if (Test-Path "$publishDir\worker\DataTracing.log") {
 
 Write-Host "`n[build] Build complete." -ForegroundColor Green
 Write-Host "   - Output: $publishDir"
-Write-Host "   - Worker: $publishDir\worker\GxMcp.Worker.exe"
-Write-Host "   - Gateway: $publishDir\GxMcp.Gateway.exe"
+Write-Host "   - Worker: $publishDir\worker\GxMcp18.Worker.exe"
+Write-Host "   - Gateway: $publishDir\GxMcp18.Gateway.exe"
 
 # 7. Deploy to Extension Backend (for live development)
 $extBackendDir = Join-Path $root "src\nexus-ide\backend"

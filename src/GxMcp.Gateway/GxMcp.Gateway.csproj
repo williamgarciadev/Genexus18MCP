@@ -2,6 +2,13 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
+    <!-- The "18" is the GeneXus major this server targets, and it is here so the running
+         process is identifiable at a glance: a machine can host this alongside the GeneXus 16
+         server (Gx16Mcp.*), and Task Manager shows the image name and nothing else.
+         The project, namespaces and test assemblies keep the GxMcp.* names — only the produced
+         binary is renamed. SelfUpdater accepts both names so installs on the old name can still
+         update themselves; see the compatibility note there. -->
+    <AssemblyName>GxMcp18.Gateway</AssemblyName>
     <TargetFramework>net8.0-windows</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>

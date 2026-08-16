@@ -3,7 +3,7 @@
 
 $PSScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Definition
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
-$Executable = Join-Path $ProjectRoot "publish\GxMcp.Gateway.exe"
+$Executable = Join-Path $ProjectRoot "publish\GxMcp18.Gateway.exe"
 
 if (-not (Test-Path $Executable)) {
     Write-Error "Gateway executable not found at $Executable. Please run .\build.ps1 first."

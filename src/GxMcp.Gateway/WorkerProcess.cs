@@ -645,8 +645,15 @@ namespace GxMcp.Gateway
 
                 if (!File.Exists(workerPath))
                 {
+                    // New name first, legacy second: a dev tree or publish/ built before the
+                    // GxMcp18.* rename must still resolve, otherwise the gateway cannot spawn a
+                    // worker at all. Note the directory stays GxMcp.Worker — only the binary
+                    // was renamed, not the project.
                     string[] devPaths = new[]
                     {
+                        Path.GetFullPath(Path.Combine(baseDir, @"..\..\..\..\..\src\GxMcp.Worker\bin\Debug\GxMcp18.Worker.exe")),
+                        Path.GetFullPath(Path.Combine(baseDir, @"..\..\..\src\GxMcp.Worker\bin\Debug\GxMcp18.Worker.exe")),
+                        Path.Combine(baseDir, @"worker\GxMcp18.Worker.exe"),
                         Path.GetFullPath(Path.Combine(baseDir, @"..\..\..\..\..\src\GxMcp.Worker\bin\Debug\GxMcp.Worker.exe")),
                         Path.GetFullPath(Path.Combine(baseDir, @"..\..\..\src\GxMcp.Worker\bin\Debug\GxMcp.Worker.exe")),
                         Path.Combine(baseDir, @"worker\GxMcp.Worker.exe")

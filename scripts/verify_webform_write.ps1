@@ -10,7 +10,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$worker = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\publish\worker\GxMcp.Worker.exe"))
+$worker = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\publish\worker\GxMcp18.Worker.exe"))
 if (-not (Test-Path $worker)) { throw "Worker not found at $worker" }
 
 function Wait-File-Contains {

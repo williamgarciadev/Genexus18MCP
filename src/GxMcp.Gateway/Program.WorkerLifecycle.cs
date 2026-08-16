@@ -152,7 +152,14 @@ namespace GxMcp.Gateway
                     Log($"[Gateway] worker_reload copy skipped — sourceDir '{sourceDir}' missing or targetDir unresolved.");
                     return;
                 }
-                string[] files = { "GxMcp.Worker.exe", "GxMcp.Worker.dll", "GxMcp.Worker.pdb", "GxMcp.Worker.exe.config" };
+                // Both namings: sourceDir is whatever bin\Debug the developer points at, which may
+                // still hold a pre-rename build. Missing entries are skipped by the loop below, so
+                // listing both is free and keeps hot-reload working across the rename.
+                string[] files =
+                {
+                    "GxMcp18.Worker.exe", "GxMcp18.Worker.dll", "GxMcp18.Worker.pdb", "GxMcp18.Worker.exe.config",
+                    "GxMcp.Worker.exe", "GxMcp.Worker.dll", "GxMcp.Worker.pdb", "GxMcp.Worker.exe.config"
+                };
                 int copied = 0;
                 foreach (var f in files)
                 {

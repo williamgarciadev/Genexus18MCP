@@ -10,17 +10,33 @@ function generateConfig(gxPath, kbPath) {
     };
 }
 
+// The gateway binary was renamed GxMcp.Gateway.exe -> GxMcp18.Gateway.exe so the running
+// process is identifiable next to the GeneXus 16 server. Both names resolve: an npx cache or a
+// publish/ directory left over from an earlier version still holds the legacy name, and the CLI
+// refusing to find it would look to the user like a broken install rather than a rename.
+// New name wins when both are present.
+const GATEWAY_EXE_CANDIDATES = ['GxMcp18.Gateway.exe', 'GxMcp.Gateway.exe'];
+
 function getGatewayExePath() {
     if (process.env.GENEXUS_MCP_GATEWAY_EXE) {
         return process.env.GENEXUS_MCP_GATEWAY_EXE;
     }
-    return path.join(__dirname, '..', '..', 'publish', 'GxMcp.Gateway.exe');
+    const publishDir = path.join(__dirname, '..', '..', 'publish');
+    for (const name of GATEWAY_EXE_CANDIDATES) {
+        const candidate = path.join(publishDir, name);
+        try {
+            if (fs.existsSync(candidate)) return candidate;
+        } catch { /* fall through to the default below */ }
+    }
+    // Nothing on disk yet (fresh checkout before a build): return the current name so error
+    // messages name the binary this version actually produces.
+    return path.join(publishDir, GATEWAY_EXE_CANDIDATES[0]);
 }
 
 function getToolDefinitionsPath() {
     // The gateway loads tool_definitions.json from its own exe directory at
     // runtime (see GxMcp.Gateway/McpRouter.cs). The packaged distribution
-    // places the file alongside publish/GxMcp.Gateway.exe via the csproj's
+    // places the file alongside publish/GxMcp18.Gateway.exe via the csproj's
     // <Content CopyToPublishDirectory="Always" /> rule. Prior versions hardcoded
     // the dev-tree path, so `genexus-mcp doctor` reported "tool_definitions.json
     // is missing" on every installed copy even though the file was present next

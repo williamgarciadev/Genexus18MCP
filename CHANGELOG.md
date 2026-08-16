@@ -79,6 +79,21 @@
   placement. Set `Indexing.LitePassResolvesHierarchy=false` in `App.config` to restore the
   previous behaviour.
 
+### Changed
+
+- **The binaries are now `GxMcp18.Gateway.exe` and `GxMcp18.Worker.exe`.** The `18` is the
+  GeneXus major this server targets. A machine can host this alongside the GeneXus 16
+  server (`Gx16Mcp.*`), and Task Manager shows nothing but the image name — so the running
+  process is now identifiable at a glance. Only the produced binaries are renamed: the
+  projects, namespaces and test assemblies keep their `GxMcp.*` names.
+  **No action is required to upgrade.** Both namings are accepted wherever a binary is
+  located — self-update, worker spawn, hot reload and the CLI's gateway lookup — because the
+  install doing the updating is the *old* one: an install that could not recognise its own
+  binary would download an update it can never apply and strand the user on a manual
+  reinstall. The new name wins when both are present. If you launch the executable directly
+  (a hand-written MCP client entry, a script, a shortcut), update that path; entries written
+  by `npx genexus-mcp init` point at `start_mcp.bat` and are unaffected.
+
 ### Internal
 
 - **Tool-schema budget raised 20000 → 20400** for `genexus_introspect`. Only 6 tokens of
@@ -100,6 +115,14 @@
   0 failures. `IntrospectOverviewTests` adds 11 cases, most of them asserting a section
   is ABSENT — a fabricated answer is worse than no answer, so the omissions are what needs
   guarding.
+- `SelfUpdaterTests` gains a matrix over both binary namings (including half-migrated
+  trees) so the compatibility shim cannot be "cleaned up" without a red test. Direction
+  note: own-product versioning decided — npm package `genexus18-mcp` at 1.0.0 when the
+  maintainer cuts that release; never publish 1.0.0 under the upstream's `genexus-mcp` name.
+- The build-lock permission in `AGENTS.md` was narrowed from killing by image name to killing
+  by PID after confirming the executable path. Observed on a dev machine: five
+  `GxMcp.Gateway` processes from the npx install plus a `Gx16Mcp` pair — a name match would
+  have killed live user sessions to clear a lock held by one scratch build.
 
 - **Index coverage census (`IndexCacheService.GetCoverageSnapshot`).** A single
   in-memory pass, no SDK, that reports per field how much of a scope actually

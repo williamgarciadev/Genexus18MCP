@@ -17,7 +17,7 @@ $root = $PSScriptRoot
 $configPath = Join-Path $root "config.json"
 $publishDir = Join-Path $root "publish"
 $startMcpBatPath = Join-Path $publishDir "start_mcp.bat"
-$gatewayExePath = Join-Path $publishDir "GxMcp.Gateway.exe"
+$gatewayExePath = Join-Path $publishDir "GxMcp18.Gateway.exe"
 $cliRunPath = Join-Path $root "cli\run.js"
 # AI client MCP registration (Claude Desktop/Code, Antigravity, Gemini CLI,
 # Cursor, OpenCode, Codex, VS Code) is delegated to the genexus-mcp CLI, which is
@@ -181,7 +181,7 @@ if (-not (Test-Path $configPath)) {
     $defaultConfig = @{
         GeneXus = @{
             InstallationPath = "C:\\Program Files (x86)\\GeneXus\\GeneXus18"
-            WorkerExecutable = "$publishDir\\worker\\GxMcp.Worker.exe"
+            WorkerExecutable = "$publishDir\\worker\\GxMcp18.Worker.exe"
         }
         Server = @{
             HttpPort = 5000

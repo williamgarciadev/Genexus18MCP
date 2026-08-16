@@ -357,8 +357,8 @@ if (-not $SkipBuild) {
     Invoke-Cmd 'pwsh' @('-NoProfile', '-File', (Join-Path $root 'build.ps1')) -IgnoreExit
     if (-not $DryRun -and $LASTEXITCODE -ne 0) {
         # build.ps1 returns non-zero on warnings sometimes; check artefacts.
-        $gw = Join-Path $root 'publish\GxMcp.Gateway.exe'
-        $wk = Join-Path $root 'publish\worker\GxMcp.Worker.exe'
+        $gw = Join-Path $root 'publish\GxMcp18.Gateway.exe'
+        $wk = Join-Path $root 'publish\worker\GxMcp18.Worker.exe'
         if (-not (Test-Path $gw) -or -not (Test-Path $wk)) {
             Fail "build.ps1 failed AND artefacts are missing. Aborting."
         }
@@ -371,8 +371,8 @@ if (-not $SkipBuild) {
 # Sanity-check the artefacts the workflow needs.
 $publishDir = Join-Path $root 'publish'
 $requiredArtefacts = @(
-    'GxMcp.Gateway.exe',
-    'worker\GxMcp.Worker.exe'
+    'GxMcp18.Gateway.exe',
+    'worker\GxMcp18.Worker.exe'
 )
 foreach ($rel in $requiredArtefacts) {
     $path = Join-Path $publishDir $rel
@@ -432,8 +432,8 @@ if (-not $SkipTests) {
 # With -SkipBuild a stale publish/ can ship silently; catch it here.
 Step "Validating artefact version stamps"
 if (-not $DryRun) {
-    $gwExe = Join-Path $publishDir 'GxMcp.Gateway.exe'
-    $wkExe = Join-Path $publishDir 'worker\GxMcp.Worker.exe'
+    $gwExe = Join-Path $publishDir 'GxMcp18.Gateway.exe'
+    $wkExe = Join-Path $publishDir 'worker\GxMcp18.Worker.exe'
     $tdJson = Join-Path $publishDir 'tool_definitions.json'
 
     if (-not (Test-Path $tdJson)) {
@@ -442,8 +442,8 @@ if (-not $DryRun) {
     Ok "tool_definitions.json present."
 
     foreach ($pair in @(
-        @{ Path = $gwExe; Label = 'GxMcp.Gateway.exe' },
-        @{ Path = $wkExe; Label = 'worker\GxMcp.Worker.exe' }
+        @{ Path = $gwExe; Label = 'GxMcp18.Gateway.exe' },
+        @{ Path = $wkExe; Label = 'worker\GxMcp18.Worker.exe' }
     )) {
         if (Test-Path $pair.Path) {
             $vi = (Get-Item $pair.Path).VersionInfo

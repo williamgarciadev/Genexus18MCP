@@ -12,7 +12,7 @@ const path = require('path');
 const fs = require('fs');
 
 const root = path.resolve(__dirname, '..');
-const exe = path.join(root, 'publish', 'GxMcp.Gateway.exe');
+const exe = path.join(root, 'publish', 'GxMcp18.Gateway.exe');
 const cfgPath = path.join(root, 'publish', 'config.json');
 
 if (!fs.existsSync(exe)) { console.error('publish exe missing — run .\\build.ps1 first'); process.exit(2); }

@@ -1,5 +1,5 @@
 # Real-KB benchmark for read / write / patch operations via stdio gateway.
-# Drives the published gateway (publish/GxMcp.Gateway.exe) over stdin/stdout JSON-RPC,
+# Drives the published gateway (publish/GxMcp18.Gateway.exe) over stdin/stdout JSON-RPC,
 # round-trips N iterations per op against 5 stable procedures in AcademicoHomolog1,
 # measures end-to-end latency from WriteLine -> matching JSON-RPC response, writes
 # results to .gx-smoke-futures/bench-<label>.json.
@@ -18,7 +18,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$gateway = "C:\Projetos\Genexus18MCP\publish\GxMcp.Gateway.exe"
+$gateway = "C:\Projetos\Genexus18MCP\publish\GxMcp18.Gateway.exe"
 $env:GX_CONFIG_PATH = "C:\Projetos\Genexus18MCP\config.json"; $env:GX_MCP_STDIO = "true"
 if (-not (Test-Path $LogDir)) { New-Item -ItemType Directory -Path $LogDir | Out-Null }
 

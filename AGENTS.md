@@ -24,7 +24,7 @@ Knowledge Base on disk
 - **Gateway** (`src/GxMcp.Gateway/`, **net8.0-windows**) — speaks MCP stdio with the client, owns a `WorkerPool` indexed by KB alias, routes tool calls through `Routers/*.cs` to a per-KB worker. `Program.cs` is the MCP loop + `whoami` builder + worker lifecycle.
 - **Worker** (`src/GxMcp.Worker/`, **net48 STA**) — owns the GeneXus SDK in-process. STA thread is mandatory because the SDK is COM-flavoured. `Services/CommandDispatcher.cs` is the RPC switchboard; `KbService` opens KBs; `IndexCacheService` maintains an on-disk `SearchIndex` cache; `Services/{ListService,SearchService,AnalyzeService,WriteService,…}` implement the tools.
 - **CLI** (`cli/run.js`) — what `npx genexus-mcp` invokes. Reads MCP client configs (Claude Desktop, Codex, Cursor, VS Code), writes the server entry pointing at `publish/start_mcp.bat`, then forwards stdio to the gateway. Tests are pure Node (`cli/run.test.js`).
-- **publish/** — the deployable artifact. Both `install.ps1` (build-from-source) and `npm publish` (via `publish.zip`) ship from this directory. `GxMcp.Gateway.exe` at the root, `worker/GxMcp.Worker.exe` one level down. This layout is asserted by the npm-publish workflow.
+- **publish/** — the deployable artifact. Both `install.ps1` (build-from-source) and `npm publish` (via `publish.zip`) ship from this directory. `GxMcp18.Gateway.exe` at the root, `worker/GxMcp18.Worker.exe` one level down. This layout is asserted by the npm-publish workflow.
 
 ### Tool surface lives in two synchronized places
 
@@ -54,7 +54,7 @@ dotnet build src\GxMcp.Worker\GxMcp.Worker.csproj
 dotnet build src\GxMcp.Gateway\GxMcp.Gateway.csproj
 ```
 
-If the build fails with `MSB3027` / `MSB3021` citing `GxMcp.Gateway.exe` or `GxMcp.Worker.exe` locked, the running dev gateway/worker is holding the binary — see the "Kill the Gateway/Worker" permission below.
+If the build fails with `MSB3027` / `MSB3021` citing `GxMcp18.Gateway.exe` or `GxMcp18.Worker.exe` locked, the running dev gateway/worker is holding the binary — see the "Kill the Gateway/Worker" permission below.
 
 ### Test
 
@@ -175,9 +175,9 @@ Streamable HTTP with a scratch gateway:
 
 1. Build Gateway+Worker to `bin/Debug` (has the fresh code).
 2. Write a throwaway config: `HttpPort` e.g. 5001, `McpStdio: false`,
-   `WorkerExecutable` → `src/GxMcp.Worker/bin/Debug/GxMcp.Worker.exe`,
+   `WorkerExecutable` → `src/GxMcp.Worker/bin/Debug/GxMcp18.Worker.exe`,
    `Environment.KBPath` → a scratch KB (`C:\KBs\KBTeste`).
-3. Launch `GxMcp.Gateway.exe` from `bin/Debug/net8.0-windows` with
+3. Launch `GxMcp18.Gateway.exe` from `bin/Debug/net8.0-windows` with
    `GX_CONFIG_PATH` set (PowerShell `Start-Process`). The launcher basher will
    hit the 30s timeout — that's expected (the child holds the pipe); verify the
    port in a follow-up call.
@@ -214,17 +214,33 @@ broad rules that accumulate over time.
 ### Kill the Gateway/Worker when they lock build outputs
 
 - **Trigger:** `dotnet build` / `dotnet test` fails with `MSB3027` or `MSB3021`
-  citing `GxMcp.Gateway.exe` or `GxMcp.Worker.exe` as the locking process.
-- **Action:** `Stop-Process -Name GxMcp.Gateway,GxMcp.Worker -Force` (PowerShell)
-  or `taskkill /IM GxMcp.Gateway.exe /F`.
-- **Rationale:** these are the user's own dev processes; pausing to ask each
-  time adds friction without protecting anything (the user can restart by
-  reconnecting the MCP client or rerunning the harness). Permission does NOT
-  extend to other processes, system services, or remote machines.
-- **Out of scope:** killing arbitrary processes by name match, killing
-  GeneXus IDE / Visual Studio, force-killing build daemons under a different
-  user, force-killing anything when no MSB lock error is present.
-- **Granted:** 2026-05-15 by user. Last reviewed: 2026-05-15.
+  citing `GxMcp18.Gateway.exe` or `GxMcp18.Worker.exe` as the locking process.
+- **Action:** kill **by PID, after confirming the executable path points into
+  this repo**. Never by image name:
+
+  ```bash
+  # the PID is in the MSB3027 message; confirm it before killing
+  wmic process where "ProcessId=<pid>" get ExecutablePath
+  taskkill //PID <pid> //F        # double slashes in Git Bash
+  ```
+
+- **NOT this:** `Stop-Process -Name GxMcp18.Gateway,GxMcp18.Worker -Force` or
+  `taskkill /IM ... /F`. Observed 2026-08-15: the machine was running **five**
+  `GxMcp.Gateway` processes from the npx production install plus a `Gx16Mcp`
+  pair for the GeneXus 16 server. A name match would have killed the user's
+  live MCP sessions to fix a lock held by one scratch build. The lock is always
+  held by a specific PID, and that PID is in the error message — there is never
+  a reason to broaden it to a name.
+- **Rationale:** the *scratch* gateway/worker are the assistant's own dev
+  processes; pausing to ask each time adds friction without protecting
+  anything. The user's npx/production instances are NOT covered by this
+  permission even though they share an image name.
+- **Out of scope:** killing by image name, killing anything whose
+  `ExecutablePath` is outside this repo (npx cache, `Genexus16MCP`, GeneXus IDE,
+  Visual Studio), force-killing build daemons under a different user,
+  force-killing anything when no MSB lock error is present.
+- **Granted:** 2026-05-15 by user. Last reviewed: 2026-08-15 (narrowed from
+  name-match to PID-match after the five-instance observation above).
 
 ## Self-update protocol (LLM-facing)
 

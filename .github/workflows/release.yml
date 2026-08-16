@@ -127,8 +127,8 @@ jobs:
           set -euo pipefail
           mkdir -p publish
           unzip -q publish.zip -d publish
-          test -f publish/GxMcp.Gateway.exe || { echo "::error::GxMcp.Gateway.exe missing in publish.zip"; exit 1; }
-          test -f publish/worker/GxMcp.Worker.exe || { echo "::error::worker/GxMcp.Worker.exe missing in publish.zip"; exit 1; }
+          test -f publish/GxMcp18.Gateway.exe || { echo "::error::GxMcp18.Gateway.exe missing in publish.zip"; exit 1; }
+          test -f publish/worker/GxMcp18.Worker.exe || { echo "::error::worker/GxMcp18.Worker.exe missing in publish.zip"; exit 1; }
           # Task 4: assert tool_definitions.json is present (version consistency validated by release.ps1)
           test -f publish/tool_definitions.json || { echo "::error::publish/tool_definitions.json missing in publish.zip — rebuild with release.ps1"; exit 1; }
 

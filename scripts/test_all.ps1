@@ -20,7 +20,7 @@ if (Test-Path "C:\Program Files (x86)\GeneXus\GeneXus18\Artech.Architecture.Comm
 }
 
 Write-Host "`n--- [2/3] Running MCP Internal Unit Tests ---" -ForegroundColor Cyan
-$gwProcess = Start-Process -FilePath (Join-Path $repoRoot "publish\GxMcp.Gateway.exe") -WindowStyle Hidden -PassThru
+$gwProcess = Start-Process -FilePath (Join-Path $repoRoot "publish\GxMcp18.Gateway.exe") -WindowStyle Hidden -PassThru
 Write-Host "Waiting for Gateway & Worker to initialize (SDK load)..."
 Start-Sleep -Seconds 15
 

@@ -2,6 +2,10 @@
   <PropertyGroup>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <OutputType>Exe</OutputType>
+    <!-- Renamed binary; see the note in GxMcp.Gateway.csproj. Project and namespaces keep the
+         GxMcp.* names — this only changes the produced executable so the process is
+         identifiable next to the GeneXus 16 server (Gx16Mcp.Worker.exe). -->
+    <AssemblyName>GxMcp18.Worker</AssemblyName>
     <TargetFramework>net48</TargetFramework>
     <LangVersion>latest</LangVersion>
     <Platforms>x86</Platforms>

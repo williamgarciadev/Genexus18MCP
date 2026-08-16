@@ -106,7 +106,7 @@ try {
     }
 
     $publishDir = Join-Path $root 'publish'
-    $gatewayExe = Join-Path $publishDir 'GxMcp.Gateway.exe'
+    $gatewayExe = Join-Path $publishDir 'GxMcp18.Gateway.exe'
     if (-not (Test-Path $gatewayExe)) {
         throw "Expected $gatewayExe after build; aborting."
     }

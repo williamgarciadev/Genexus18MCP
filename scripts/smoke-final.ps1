@@ -2,7 +2,7 @@ param([string]$LogDir = "C:\Projetos\Genexus18MCP\.gx-smoke-final")
 
 $ErrorActionPreference = "Stop"
 $root = "C:\Projetos\Genexus18MCP"
-$gateway = Join-Path $root "publish\GxMcp.Gateway.exe"
+$gateway = Join-Path $root "publish\GxMcp18.Gateway.exe"
 $env:GX_CONFIG_PATH = Join-Path $root "config.json"; $env:GX_MCP_STDIO = "true"
 
 if (-not (Test-Path $LogDir)) { New-Item -ItemType Directory -Path $LogDir | Out-Null }

@@ -50,7 +50,28 @@ namespace GxMcp.Gateway
             }
         }
 
-        private static string GatewayExeName => "GxMcp.Gateway.exe";
+        // Renamed to GxMcp18.* so the running process is identifiable next to the GeneXus 16
+        // server. Both names are honoured on purpose, and the direction matters: an install
+        // sitting on the OLD name must still be able to update itself to a package built under
+        // the NEW one. If this only knew the new name, every existing install would download the
+        // update, fail to find its own binary, and strand the user on a manual reinstall.
+        // Preference is new-then-legacy so a fresh install never picks up a stale leftover.
+        private const string GatewayExeNameCurrent = "GxMcp18.Gateway.exe";
+        private const string GatewayExeNameLegacy = "GxMcp.Gateway.exe";
+        private const string WorkerExeNameCurrent = "GxMcp18.Worker.exe";
+        private const string WorkerExeNameLegacy = "GxMcp.Worker.exe";
+
+        private static string GatewayExeName => GatewayExeNameCurrent;
+
+        /// <summary>First of <paramref name="candidates"/> that exists under <paramref name="dir"/>, else null.</summary>
+        private static string? FirstExisting(string dir, params string[] candidates)
+        {
+            foreach (var c in candidates)
+            {
+                try { if (File.Exists(Path.Combine(dir, c))) return c; } catch { }
+            }
+            return null;
+        }
         private static string VersionFile => Path.Combine(InstallDir, "version.txt");
         private static string StagedDir => Path.Combine(InstallDir, ".staged");
         private static string StagedTmpDir => Path.Combine(InstallDir, ".staged.tmp");
@@ -61,7 +82,15 @@ namespace GxMcp.Gateway
         // present next to the gateway exe). npx-cache launches have neither.
         public static bool IsManagedInstall()
         {
-            try { return File.Exists(VersionFile) && File.Exists(Path.Combine(InstallDir, GatewayExeName)); }
+            // Either binary name counts. Checking only the current name would report every
+            // install made before the GxMcp18.* rename as "unmanaged" and silently switch its
+            // self-update off — the users who most need the update are exactly the ones on the
+            // old name.
+            try
+            {
+                return File.Exists(VersionFile)
+                    && FirstExisting(InstallDir, GatewayExeNameCurrent, GatewayExeNameLegacy) != null;
+            }
             catch { return false; }
         }
 
@@ -182,7 +211,23 @@ namespace GxMcp.Gateway
                 .Select(src => new { Src = src, Dst = Path.Combine(installDir, GetRelative(stagedRoot, src)) })
                 .ToList();
 
-            string gatewayTarget = Path.Combine(installDir, GatewayExeName);
+            // The gateway binary cannot be overwritten while it is running, so it gets the
+            // rename-then-replace treatment below and every other file is copied normally. That
+            // means this must name the binary THIS PROCESS is actually running from — which, on an
+            // install predating the GxMcp18.* rename, is still the legacy name. Hardcoding the new
+            // name here would treat the running exe as an ordinary file, and the copy would fail
+            // against the lock we were trying to avoid.
+            string runningExe = Path.Combine(installDir,
+                FirstExisting(installDir, GatewayExeNameCurrent, GatewayExeNameLegacy) ?? GatewayExeName);
+            try
+            {
+                string? self = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName;
+                if (!string.IsNullOrEmpty(self) && PathEquals(Path.GetDirectoryName(self) ?? "", installDir))
+                    runningExe = self!;
+            }
+            catch { /* fall back to the name-based guess above */ }
+
+            string gatewayTarget = runningExe;
 
             // Pre-flight: confirm every existing non-gateway target is replaceable.
             foreach (var p in plan)
@@ -355,13 +400,16 @@ namespace GxMcp.Gateway
 
         // ── Helpers ──────────────────────────────────────────────────────────────
 
-        // The staged tree must contain the two binaries the install asserts on.
+        // The staged tree must contain the two binaries the install asserts on. Either naming is
+        // accepted: a package built before the GxMcp18.* rename is still a valid payload, and
+        // refusing it would turn a cosmetic rename into a failed update.
         internal static bool StagedPayloadValid(string root)
         {
             try
             {
-                return File.Exists(Path.Combine(root, GatewayExeName))
-                    && File.Exists(Path.Combine(root, "worker", "GxMcp.Worker.exe"));
+                bool gateway = FirstExisting(root, GatewayExeNameCurrent, GatewayExeNameLegacy) != null;
+                bool worker = FirstExisting(Path.Combine(root, "worker"), WorkerExeNameCurrent, WorkerExeNameLegacy) != null;
+                return gateway && worker;
             }
             catch { return false; }
         }

@@ -144,8 +144,8 @@ Install location:
 Paths to give to IT for the ASR / Defender exclusion list:
 
 ```
-<InstallDir>\GxMcp.Gateway.exe
-<InstallDir>\worker\GxMcp.Worker.exe
+<InstallDir>\GxMcp18.Gateway.exe
+<InstallDir>\worker\GxMcp18.Worker.exe
 ```
 
 Re-run the same one-liner later to **upgrade** — it detects the installed version (`version.txt` in the install dir) and downloads only if a newer release is available. Use `-Force` to reinstall the same version, `-Version v2.3.0` to pin a specific tag, `-NoClient` to skip AI client registration. Node.js 18+ must be installed for client registration; without it the script still extracts the binaries but you'll need to edit the client config (`claude_desktop_config.json` etc.) manually.
@@ -402,7 +402,7 @@ The installer writes a `config.json` for you. To customize networking, timeouts,
   },
   "GeneXus": {
     "InstallationPath": "C:\\Program Files (x86)\\GeneXus\\GeneXus18",
-    "WorkerExecutable": "worker\\GxMcp.Worker.exe"
+    "WorkerExecutable": "worker\\GxMcp18.Worker.exe"
   },
   "Environment": {
     "DefaultKb": "main",

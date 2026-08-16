@@ -34,6 +34,59 @@ namespace GxMcp.Gateway.Tests
             }
         }
 
+        /// <summary>
+        /// The binaries were renamed GxMcp.* -> GxMcp18.* so the process is identifiable next to
+        /// the GeneXus 16 server. This pins the compatibility that makes the rename safe to ship.
+        ///
+        /// Read the failure direction before "simplifying" this away: the install doing the
+        /// updating is the OLD one. If a package built under the new name is rejected — or an
+        /// install sitting on the old name is treated as unmanaged — the user downloads an update
+        /// that can never apply and is stranded on a manual reinstall. Both namings must stay
+        /// valid until every supported install has moved over.
+        /// </summary>
+        [Theory]
+        [InlineData("GxMcp18.Gateway.exe", "GxMcp18.Worker.exe")]   // post-rename package
+        [InlineData("GxMcp.Gateway.exe", "GxMcp.Worker.exe")]       // package built before the rename
+        [InlineData("GxMcp18.Gateway.exe", "GxMcp.Worker.exe")]     // half-migrated tree
+        [InlineData("GxMcp.Gateway.exe", "GxMcp18.Worker.exe")]
+        public void StagedPayloadValid_AcceptsBothNamings(string gatewayName, string workerName)
+        {
+            string root = Path.Combine(Path.GetTempPath(), "gxmcp-staged-names-" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                Directory.CreateDirectory(Path.Combine(root, "worker"));
+                File.WriteAllText(Path.Combine(root, gatewayName), "x");
+                File.WriteAllText(Path.Combine(root, "worker", workerName), "x");
+
+                Assert.True(SelfUpdater.StagedPayloadValid(root),
+                    $"payload with {gatewayName} + worker/{workerName} must be accepted");
+            }
+            finally
+            {
+                try { Directory.Delete(root, recursive: true); } catch { }
+            }
+        }
+
+        [Fact]
+        public void StagedPayloadValid_StillRejectsAWorkerNamedLikeTheGateway()
+        {
+            // Guards against "accept anything vaguely GxMcp-ish". The worker must be under
+            // worker/, whichever of the two names it carries.
+            string root = Path.Combine(Path.GetTempPath(), "gxmcp-staged-bad-" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                Directory.CreateDirectory(Path.Combine(root, "worker"));
+                File.WriteAllText(Path.Combine(root, "GxMcp18.Gateway.exe"), "x");
+                File.WriteAllText(Path.Combine(root, "GxMcp18.Worker.exe"), "x");   // wrong location
+
+                Assert.False(SelfUpdater.StagedPayloadValid(root));
+            }
+            finally
+            {
+                try { Directory.Delete(root, recursive: true); } catch { }
+            }
+        }
+
         [Fact]
         public void StagedPayloadValid_FalseForMissingDir()
         {

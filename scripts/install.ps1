@@ -409,8 +409,8 @@ $VersionNoV = $Version.TrimStart('v')
 Write-Step "Target version: $Version"
 
 $versionFile = Join-Path $InstallDir 'version.txt'
-$gatewayExe  = Join-Path $InstallDir 'GxMcp.Gateway.exe'
-$workerExe   = Join-Path $InstallDir 'worker\GxMcp.Worker.exe'
+$gatewayExe  = Join-Path $InstallDir 'GxMcp18.Gateway.exe'
+$workerExe   = Join-Path $InstallDir 'worker\GxMcp18.Worker.exe'
 
 # Repair == force a fresh extract even if versions match.
 if ($Repair) { $Force = $true }

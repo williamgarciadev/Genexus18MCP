@@ -531,7 +531,7 @@ test('--fields validation returns usage error for invalid doctor field', () => {
 test('doctor finds tool_definitions.json next to the gateway exe (not just dev-tree)', () => {
     // Regression for v2.6.6 bug: getToolDefinitionsPath() hard-coded the dev-tree
     // location, so every installed copy reported "tool_definitions.json is missing"
-    // even though the file was published alongside GxMcp.Gateway.exe.
+    // even though the file was published alongside GxMcp18.Gateway.exe.
     const result = runCli(['doctor', '--format', 'json']);
     assert.equal(result.status, 0);
 
@@ -835,11 +835,11 @@ test('compareSemver detects newer, older, equal versions', () => {
 
 test('detectInstallMethod returns fixed-path when GENEXUS_MCP_GATEWAY_EXE is set', () => {
     const prev = process.env.GENEXUS_MCP_GATEWAY_EXE;
-    process.env.GENEXUS_MCP_GATEWAY_EXE = 'C:\\Tools\\GenexusMCP\\GxMcp.Gateway.exe';
+    process.env.GENEXUS_MCP_GATEWAY_EXE = 'C:\\Tools\\GenexusMCP\\GxMcp18.Gateway.exe';
     try {
         const r = detectInstallMethod();
         assert.equal(r.method, 'fixed-path');
-        assert.equal(r.detail, 'C:\\Tools\\GenexusMCP\\GxMcp.Gateway.exe');
+        assert.equal(r.detail, 'C:\\Tools\\GenexusMCP\\GxMcp18.Gateway.exe');
     } finally {
         if (prev === undefined) delete process.env.GENEXUS_MCP_GATEWAY_EXE;
         else process.env.GENEXUS_MCP_GATEWAY_EXE = prev;
