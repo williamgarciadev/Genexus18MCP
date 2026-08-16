@@ -29,15 +29,41 @@ namespace GxMcp.Worker.Models
         /// <summary>
         /// Fields only enrichment writes. Absence here is indistinguishable from "not read yet",
         /// so it must never be reasoned over.
+        ///
+        /// Placement (module / parentPath / path / folderPath) is deliberately NOT in this set:
+        /// which pass writes it depends on Indexing.LitePassResolvesHierarchy, so its trust level
+        /// is decided at runtime by PlacementFields + PlacementResolvedByLitePass below.
         /// </summary>
         private static readonly HashSet<string> EnrichmentOnlyFields = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            "module", "parentPath", "calls", "calledBy", "tables", "rules",
+            "calls", "calledBy", "tables", "rules",
             "sourceSnippet", "complexity", "embedding"
+        };
+
+        /// <summary>
+        /// The placement family. These answer one question — "where does this object live?" — and
+        /// must share a single trust level, or a caller can be told the module is untrustworthy
+        /// while the folder path is fine when both come from the same resolution step.
+        /// </summary>
+        private static readonly HashSet<string> PlacementFields = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "module", "parentPath", "path", "folderPath", "parentFolderPath"
         };
 
         public int ObjectsInScope { get; set; }
         public int EnrichedInScope { get; set; }
+
+        /// <summary>
+        /// Whether the pass that produced this index resolved placement (Module / ParentPath / Path)
+        /// for every object — i.e. Indexing.LitePassResolvesHierarchy was on.
+        ///
+        /// This is what makes placement's trust level a property of the INDEX rather than of the
+        /// field name. With the lite walk resolving it, an absent Module is a fact about the KB
+        /// ("this object sits outside any module") and the honest label is observed/complete. With
+        /// the kill-switch off it is enrichment-only again, absence means "not read yet", and the
+        /// label must stay partial. Hardcoding either one lies in the other configuration.
+        /// </summary>
+        public bool PlacementResolvedByLitePass { get; set; }
 
         /// <summary>
         /// Entries whose placement was actually resolved — i.e. a non-empty ParentPath.
@@ -91,15 +117,35 @@ namespace GxMcp.Worker.Models
         {
             if (ObjectsInScope <= 0) return "unavailable";
 
-            // Placement is a special case: ParentFolderPath/Path are always populated because
-            // they are composed from ParentPath, so their raw population count says nothing.
-            // What matters is whether placement was ever resolved.
-            if (string.Equals(field, "folderPath", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(field, "parentFolderPath", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(field, "path", StringComparison.OrdinalIgnoreCase))
+            // Placement is a special case twice over.
+            //
+            // First, the raw population count of ParentFolderPath/Path says nothing: they are
+            // composed from ParentPath, and ComposeParentFolderPath turns an empty ParentPath into
+            // the literal "Root Module", so they read as 100% populated on an index where nothing
+            // was ever resolved. The real signal is StructureResolvedInScope.
+            //
+            // Second, WHICH PASS wrote it is a runtime fact, not a property of the field name.
+            // With Indexing.LitePassResolvesHierarchy on, the lite walk resolves placement for
+            // every object, so an absent Module is a fact about the KB ("outside any module") and
+            // the honest label is observed/complete. With the kill-switch off it is enrichment-only
+            // again and absence means "not read yet" — partial. Hardcoding either one lies in the
+            // other configuration; see PlacementResolvedByLitePass.
+            if (PlacementFields.Contains(field ?? string.Empty))
             {
+                // Nothing resolved. We deliberately do NOT distinguish "the KB is flat" from "this
+                // index predates the fix" — both demand the same thing: emit no section that leans
+                // on placement. Reporting "observed:0" here would assert the KB has no modules,
+                // which is the exact false claim this vocabulary exists to prevent.
                 if (StructureResolvedInScope == 0) return "unavailable";
-                return "partial:" + Fmt(StructureResolvedPct);
+
+                // Module carries its own count (an object can be placed in a folder yet belong to
+                // no module); the path-shaped fields all ride on the resolution rate.
+                double placementPct = string.Equals(field, "module", StringComparison.OrdinalIgnoreCase)
+                    ? PctOf("module")
+                    : StructureResolvedPct;
+
+                if (!PlacementResolvedByLitePass) return "partial:" + Fmt(placementPct);
+                return placementPct >= 100d ? "complete" : "observed:" + Fmt(placementPct);
             }
 
             double pct = PctOf(field);
@@ -120,12 +166,26 @@ namespace GxMcp.Worker.Models
             return pct <= 0d ? "unavailable" : "observed:" + Fmt(pct);
         }
 
-        /// <summary>True when a section built on <paramref name="field"/> must be suppressed rather than emitted.</summary>
+        /// <summary>
+        /// True when a section built on <paramref name="field"/> must be suppressed rather than emitted.
+        ///
+        /// The floor applies to "partial" ONLY, and that asymmetry is the whole point. Under
+        /// "partial" the percentage measures OUR BLINDNESS — 45% populated means 55% unread, and a
+        /// section built on it would present a sample as a population. Under "observed" the very
+        /// same number measures THE KB — the cheap pass attempted every object, so 45% populated
+        /// means 55% genuinely have no value, which is a reportable fact, not a gap.
+        ///
+        /// Measured case that forced this: after a reindex, placement resolved for 1,504 of 3,307
+        /// objects — the other 1,803 really do sit at the root. Suppressing module membership at
+        /// "observed:45.5" withheld a complete, correct answer on the grounds that the KB itself
+        /// was not tidy enough. The caller still sees the level in basedOn and can judge it.
+        /// </summary>
         public bool ShouldSuppress(string field, double floorPct)
         {
             string trust = TrustOf(field);
             if (trust == "unavailable") return true;
             if (trust == "complete") return false;
+            if (trust.StartsWith("observed:", StringComparison.OrdinalIgnoreCase)) return false;
             return PctOfTrust(trust) < floorPct;
         }
 

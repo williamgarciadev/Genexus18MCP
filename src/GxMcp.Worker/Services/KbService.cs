@@ -640,7 +640,7 @@ namespace GxMcp.Worker.Services
                         // for enrichment) and it opens no objects. Timed into its own
                         // accumulator so the cost stays visible in [LITE-WALK] on any KB.
                         // Kill-switch: Indexing.LitePassResolvesHierarchy=false.
-                        string hModule = null, hParentPath = null, hPath = null;
+                        string hModule = null, hParentPath = null, hPath = null, hFolderPath = null;
                         if (Configuration.LitePassResolvesHierarchy)
                         {
                             long hStart = Stopwatch.GetTimestamp();
@@ -650,6 +650,12 @@ namespace GxMcp.Worker.Services
                                 hModule = h.ModuleName;
                                 hParentPath = h.ParentPath;
                                 hPath = h.Path;
+                                // Compose it here too. NormalizeLegacyHierarchy only runs on the
+                                // load-from-disk path, so without this a freshly reindexed index
+                                // carries no ParentFolderPath at all and anything grouping by
+                                // folder sees nothing — until a reload silently fixes it. Measured
+                                // live: distinctFolderPaths went 109 -> 0 across a reindex.
+                                hFolderPath = IndexCacheService.ComposeParentFolderPath(hParentPath);
                             }
                             catch { }
                             hierarchyTicks += Stopwatch.GetTimestamp() - hStart;
@@ -669,6 +675,7 @@ namespace GxMcp.Worker.Services
                             Module = hModule,
                             ParentPath = hParentPath,
                             Path = hPath,
+                            ParentFolderPath = hFolderPath,
                             IsEnriched = false
                         });
 

@@ -210,6 +210,37 @@ namespace GxMcp.Gateway
             return new JValue(raw.Substring(0, 75000) + "... [TRUNCATED]");
         }
 
+        // The OTHER half of the cache contract, and the one that is easy to get wrong.
+        //
+        // IsMutatingTool answers "must the cache be cleared?"; this answers "may this response be
+        // cached at all?". They are not opposites, and a tool that needs the second must NOT be
+        // put in the first: IsMutatingTool triggers a full _semanticCache.Clear(), so registering
+        // a frequently-called read there would flush every cached read in the session on each call.
+        //
+        // A live tool reports state that moves without any KB object changing — job progress, log
+        // tails, server state, index coverage — so replaying an envelope for it hands the caller a
+        // past reading of the present. Extracted from the request loop so it can be asserted; it
+        // was previously a local boolean, which is why nothing guarded it.
+        internal static bool IsLiveTool(string toolName, JObject? args)
+        {
+            if (string.IsNullOrWhiteSpace(toolName)) return false;
+
+            if (string.Equals(toolName, "genexus_logs", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(toolName, "genexus_gxserver", StringComparison.OrdinalIgnoreCase) ||
+                // Reports current index coverage/census. After a reindex a replayed envelope would
+                // still claim 0.2% enriched, and every suppression decision downstream keys off it.
+                string.Equals(toolName, "genexus_introspect", StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            if (string.Equals(toolName, "genexus_lifecycle", StringComparison.OrdinalIgnoreCase))
+            {
+                string? a = args?["action"]?.ToString()?.ToLowerInvariant();
+                return a == "status" || a == "result" || a == "cancel";
+            }
+
+            return false;
+        }
+
         // Semantic-cache invalidation gate: returns true when a tool call may
         // change KB object state, so DispatchCore can clear _semanticCache before
         // (and only before) a mutation. A MISS here means the next identical read

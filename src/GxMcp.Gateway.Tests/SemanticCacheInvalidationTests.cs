@@ -109,6 +109,7 @@ namespace GxMcp.Gateway.Tests
         [InlineData("genexus_deploy")]
         [InlineData("genexus_multi_agent_lock")]
         [InlineData("genexus_sandbox")]
+        [InlineData("genexus_introspect")]
         public void ToolsWithNoMutatingSignal_AreNotFlagged(string toolName)
         {
             // No action argument at all: these tools must not invalidate the cache.
@@ -167,6 +168,60 @@ namespace GxMcp.Gateway.Tests
             // The gateway must not depend on the caller passing arguments to decide
             // whether a delete invalidates cached reads.
             Assert.True(Program.IsMutatingTool("genexus_delete_object", null));
+        }
+
+        // ── The other half: never-cached, and why that is NOT the same as mutating ──
+
+        /// <summary>
+        /// genexus_introspect must sit in exactly one of the two lists, and getting it wrong is
+        /// costly in both directions.
+        ///
+        /// Cached (neither list): after a reindex it would still report the pre-reindex coverage,
+        /// and every suppression decision downstream keys off those numbers — the agent would be
+        /// told a resolved tree is still unavailable.
+        ///
+        /// Mutating (the wrong list): IsMutatingTool triggers a full _semanticCache.Clear(), so
+        /// a reconnaissance call meant to be made FIRST and OFTEN would flush every cached read in
+        /// the session. It changes no KB object; the Brief lands in .gx/.
+        /// </summary>
+        [Fact]
+        public void Introspect_IsNeverCached_ButDoesNotFlushTheCache()
+        {
+            Assert.True(Program.IsLiveTool("genexus_introspect", new JObject()),
+                "genexus_introspect must never serve a cached envelope: it reports current index coverage.");
+            Assert.False(Program.IsMutatingTool("genexus_introspect", new JObject()),
+                "genexus_introspect must NOT be flagged mutating — that clears the whole semantic cache on every call.");
+        }
+
+        [Theory]
+        [InlineData("genexus_logs")]
+        [InlineData("genexus_gxserver")]
+        [InlineData("genexus_introspect")]
+        public void LiveTools_AreNeverCached(string toolName)
+        {
+            Assert.True(Program.IsLiveTool(toolName, new JObject()), $"expected {toolName} to be never-cached");
+        }
+
+        [Theory]
+        [InlineData("status")]
+        [InlineData("result")]
+        [InlineData("cancel")]
+        public void Lifecycle_ProgressReads_AreNeverCached(string action)
+        {
+            Assert.True(Program.IsLiveTool("genexus_lifecycle", new JObject { ["action"] = action }));
+        }
+
+        [Theory]
+        [InlineData("genexus_lifecycle", "index")]   // long-running, but its ENVELOPE is cacheable
+        [InlineData("genexus_read", null)]
+        [InlineData("genexus_inspect", null)]
+        [InlineData("genexus_list_objects", null)]
+        public void OrdinaryReads_StayCacheable(string toolName, string action)
+        {
+            var args = new JObject();
+            if (action != null) args["action"] = action;
+            Assert.False(Program.IsLiveTool(toolName, args),
+                $"{toolName} should remain cacheable; marking it live throws away the cache's whole benefit.");
         }
     }
 }

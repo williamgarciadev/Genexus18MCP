@@ -710,7 +710,12 @@ namespace GxMcp.Worker.Services
         // "Root Module" so callers can pathPrefix-filter by the same string they
         // see in the GeneXus IDE. Empty hierarchy.ParentPath means object lives
         // directly under DesignModel -> we surface "Root Module" as the folder.
-        private static string ComposeParentFolderPath(string hierarchyParentPath)
+        // internal (was private): the lite walk composes this in-line now. Before, ParentFolderPath
+        // was written only on the load-from-disk path (NormalizeLegacyHierarchy), so a freshly
+        // reindexed index carried none — measured live, distinctFolderPaths dropped 109 -> 0 across
+        // a reindex and came back after a reload. Same index, two different answers depending on
+        // how it reached memory. Sharing the composer keeps the two paths from drifting again.
+        internal static string ComposeParentFolderPath(string hierarchyParentPath)
         {
             if (string.IsNullOrWhiteSpace(hierarchyParentPath))
                 return "Root Module";
@@ -1256,7 +1261,13 @@ namespace GxMcp.Worker.Services
         /// </summary>
         public CoverageSnapshot GetCoverageSnapshot(IEnumerable<SearchIndex.IndexEntry> scope = null)
         {
-            var snap = new CoverageSnapshot();
+            // Placement's trust level depends on which pass wrote it, and that is this flag —
+            // see CoverageSnapshot.PlacementResolvedByLitePass. Read once, up front, so every
+            // field in the snapshot is judged against the same index-producing configuration.
+            var snap = new CoverageSnapshot
+            {
+                PlacementResolvedByLitePass = Configuration.LitePassResolvesHierarchy
+            };
 
             IEnumerable<SearchIndex.IndexEntry> entries = scope;
             if (entries == null)

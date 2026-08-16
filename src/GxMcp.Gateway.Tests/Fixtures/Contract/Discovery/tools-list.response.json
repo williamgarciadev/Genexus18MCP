@@ -1691,6 +1691,39 @@
     {
       "annotations": {
         "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "description": "KB reconnaissance before deep work — call this FIRST on an unfamiliar KB, before any broad genexus_query or genexus_list_objects. depth=overview is index-only: it opens no object, needs no SDK and never fails on a cold KB. Returns a type census, container inventory (Module/Folder names), activity windows, naming cohorts with their support, and a coverage block. READ coverage.fieldTrust BEFORE BELIEVING ANY RELATIONAL CLAIM: 'partial:<pct>' means NOT READ YET and must never be read as zero (on a lazily-enriched index a 0-caller object is almost always unread, not unused). Sections whose data would mislead are omitted, not zeroed, and each is named in suppressed[] with the exact call that unlocks it. depth=map and depth=deep are not wired yet.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "examples": [
+          {},
+          {
+            "depth": "overview"
+          }
+        ],
+        "properties": {
+          "depth": {
+            "description": "Detail level. Only 'overview' is available today; map/deep return DepthNotAvailable.",
+            "enum": [
+              "overview"
+            ],
+            "type": "string"
+          },
+          "kb": {
+            "description": "KB alias. Required only when multiple KBs are open.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "genexus_introspect"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
         "idempotentHint": false,
         "openWorldHint": false,
         "readOnlyHint": false

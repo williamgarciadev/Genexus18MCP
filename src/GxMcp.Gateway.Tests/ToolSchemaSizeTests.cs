@@ -123,7 +123,16 @@ namespace GxMcp.Gateway.Tests
             //   2026-08-13 (create_index dry-run safety): 19800 → 20000 for the
             //   get_indexes versionToken/baseVersion contract, projected diff,
             //   exact post-save verification and rollback semantics. Measured ~19875.
-            Assert.True(approxTokens < 20000, $"tool_definitions.json is ~{approxTokens} tokens; budget 20000.");
+            //   2026-08-15 (genexus_introspect overview): 20000 → 20400 for the new
+            //   genexus_introspect tool. Only 6 tokens of headroom were left, so the
+            //   bump is what makes the tool possible at all. The schema itself is
+            //   deliberately minimal — two properties (depth, kb) — and depth's enum
+            //   declares only the level that is actually wired; the cost is almost
+            //   entirely the description, which carries the one rule an agent must
+            //   read before trusting the payload ("partial:<pct>" means NOT READ YET,
+            //   never zero). The rest of the policy lives in the tool-help resource,
+            //   which costs no schema budget. Measured ~20309 tokens; ~91 headroom.
+            Assert.True(approxTokens < 20400, $"tool_definitions.json is ~{approxTokens} tokens; budget 20400.");
         }
     }
 }

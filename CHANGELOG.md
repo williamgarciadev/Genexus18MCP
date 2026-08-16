@@ -2,8 +2,65 @@
 
 ## Unreleased
 
+### Added
+
+- **`genexus_introspect` — reconnaissance before the magnifying glass.** Call it first
+  on an unfamiliar KB, before any broad `genexus_query` or `genexus_list_objects`.
+  `depth=overview` opens no object and needs no SDK, so it never fails on a cold KB:
+  it answers only from fields the pass that built the index attempted for *every*
+  object. You get a type census that always reconciles to the total, the inventory of
+  Module and Folder names, activity windows (7/30/90 days), naming regularities with
+  their measured support, pattern-type adoption counts, and a `coverage` block at the
+  top of the result.
+  What makes it trustworthy is what it refuses to say. Every field carries a trust
+  level, and `partial:<pct>` means **not read yet** — never zero. On a lazily-enriched
+  index an object with 0 callers is almost always one nobody opened, not one nobody
+  uses, so `overview` never touches `Calls`/`CalledBy`/`Tables` at all. Any section
+  whose data would mislead is **omitted rather than zeroed** — an empty `modules: {}`
+  invites the reader to conclude the KB has no modules — and each omission is named in
+  `suppressed[]` together with the exact call that unlocks it. Container *names* are
+  still listed even when membership is withheld, so you learn the KB is not flat
+  without being handed a tree that isn't there. On an index still being built, counts
+  are withheld entirely and `censusInProgress` says so, instead of presenting a
+  half-built census as if it described the KB. `notDetected[]` states outright what
+  the tool cannot know (generator/runtime target, naming or REST conventions,
+  architecture) and what it would take, so silence is never mistaken for "nothing to
+  report".
+
 ### Fixed
 
+- **A freshly reindexed KB reported no folders at all.** `ParentFolderPath` was written only
+  on the load-from-disk path, never by the index pass itself, so straight after
+  `genexus_lifecycle action=index force=true` every entry carried an empty folder path —
+  and anything grouping or filtering by folder saw nothing until the next reload silently
+  put it back. Measured live on a 3,321-object KB: distinct folder paths went from 109 to 0
+  across a reindex, then returned after a restart. The same index gave two different
+  answers depending on how it reached memory. The index pass now composes the folder path
+  inline, sharing the same composer as the load path so the two cannot drift again.
+- **Sections were withheld even when the data behind them was complete and correct.** The
+  suppression floor (60%) was applied to every trust level, including `observed`. Those two
+  cases carry the same number and mean opposite things: under `partial` a 45% figure is
+  *our* blindness — 55% unread — and publishing a section from it would present a sample as
+  a population; under `observed` the identical figure describes *the KB* — 55% of objects
+  genuinely have no value there — which is a reportable fact. Measured live: after a
+  reindex, placement resolved for 1,504 of 3,307 objects (the other 1,803 really do sit at
+  the root) and module membership was suppressed at `observed:45.5`, withholding a complete
+  and correct answer because the KB itself was not tidy enough. The floor now applies to
+  `partial` only; `observed` sections are emitted with their level in `basedOn` so the
+  caller can judge them.
+- **Resolved folder trees were reported as untrustworthy.** After placement moved into
+  the lite index pass, `Module` / `ParentPath` / `folderPath` kept the trust level
+  `partial` — which is defined as "enrichment-only, an absence means we have not looked
+  yet". That was no longer true: the lite pass now attempts placement for every object,
+  so a missing module is a *fact* about the KB (the object sits outside any module).
+  The label is the same class of error as the fabricated `"Root Module"` pointed the
+  other way — it under-trusts data that is actually complete, and made consumers
+  suppress a tree they could legitimately draw. Placement's trust level is now decided
+  by which pass produced the index rather than by the field name: `complete`/`observed`
+  when the lite pass resolved it, `partial` when the kill-switch
+  (`Indexing.LitePassResolvesHierarchy=false`) leaves it to enrichment, and
+  `unavailable` when nothing was resolved at all — so an index predating the fix is
+  never reported as a flat KB.
 - **The folder tree was fabricated: every object reported `Root Module`.** An object's
   placement — `Module`, `ParentPath`, `Path` — was written only by enrichment, and under
   the default lazy enrichment most objects are never enriched, so placement stayed empty
@@ -23,6 +80,26 @@
   previous behaviour.
 
 ### Internal
+
+- **Tool-schema budget raised 20000 → 20400** for `genexus_introspect`. Only 6 tokens of
+  headroom were left, so the bump is what makes the tool possible at all. The schema
+  itself is deliberately minimal — two properties (`depth`, `kb`), and `depth`'s enum
+  declares only the level that is actually wired, rather than advertising `map`/`deep`
+  before they exist. Measured ~20309 tokens; ~91 headroom.
+- **`Program.IsLiveTool`** extracted from the request loop, next to `IsMutatingTool`, so
+  both halves of the semantic-cache contract sit together and can be asserted. "Never
+  cached" and "clears the cache" are not opposites: `genexus_introspect` needs the first
+  (it reports current index coverage, so a replayed envelope would claim the pre-reindex
+  numbers) and must NOT get the second (`IsMutatingTool` triggers a full cache clear, so
+  a tool meant to be called first and often would flush every cached read in the
+  session). It was a local boolean before, which is why nothing guarded it;
+  `SemanticCacheInvalidationTests` now pins both sides.
+- Golden discovery fixture regenerated (`GXMCP_UPDATE_GOLDEN=1`) — 48 tools,
+  `genexus_introspect` sorted between `genexus_inspect` and `genexus_io`.
+- Worker tests 1944 (1940 passed, 4 skipped), gateway tests 1055 (1048 passed, 7 skipped),
+  0 failures. `IntrospectOverviewTests` adds 11 cases, most of them asserting a section
+  is ABSENT — a fabricated answer is worse than no answer, so the omissions are what needs
+  guarding.
 
 - **Index coverage census (`IndexCacheService.GetCoverageSnapshot`).** A single
   in-memory pass, no SDK, that reports per field how much of a scope actually

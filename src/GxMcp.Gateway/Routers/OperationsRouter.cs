@@ -241,6 +241,26 @@ namespace GxMcp.Gateway.Routers
                 // diff_generated merged into genexus_versioning umbrella.
 
                 // Item 90 — Markdown README generation.
+                // KB reconnaissance before the magnifying glass. depth maps 1:1 to the worker
+                // action; overview is the default because it is the only level that never fails
+                // on a cold KB (no SDK, index-only) and is therefore safe as a first call.
+                case "genexus_introspect":
+                {
+                    string depth = (args?["depth"]?.ToString() ?? "overview").Trim().ToLowerInvariant();
+                    string introspectAction =
+                        depth == "map" ? "Map" :
+                        depth == "deep" ? "Deep" : "Overview";
+                    return new
+                    {
+                        module = "Introspect",
+                        action = introspectAction,
+                        target = "_kb",
+                        scope = args?["scope"]?.ToString(),
+                        scopeKind = args?["scopeKind"]?.ToString(),
+                        write = args?["write"]?.ToObject<bool?>() ?? false
+                    };
+                }
+
                 case "genexus_kb_readme":
                     return new
                     {

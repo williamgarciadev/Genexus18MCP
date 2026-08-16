@@ -55,6 +55,7 @@ namespace GxMcp.Worker.Services
         private readonly WwpActionService _wwpActionService;
         private readonly AtomicAuthoringService _atomicAuthoringService;
         private readonly DataInsightService _dataInsightService;
+        private readonly IntrospectService _introspectService;
         private readonly DatabaseInfoService _databaseInfoService;
         private readonly SummarizeService _summarizeService;
         private readonly InjectionService _injectionService;
@@ -193,6 +194,9 @@ namespace GxMcp.Worker.Services
             _versionControlService = new VersionControlService(_kbService);
             _dataInsightService = new DataInsightService(_kbService, _objectService, _navigationService, _patternAnalysisService);
             _databaseInfoService = new DatabaseInfoService(_kbService);
+            // Index-only by construction: no KbService, no ObjectService, so it cannot open an
+            // object even by accident. That is the guarantee that makes overview safe to call first.
+            _introspectService = new IntrospectService(_indexCacheService);
             _writeService = new WriteService(_objectService);
             _wwpActionService = new WwpActionService(_objectService, _patternAnalysisService, _writeService);
             _refactorService = new RefactorService(_kbService, _objectService, _indexCacheService, _writeService, _patternAnalysisService);
@@ -566,6 +570,7 @@ namespace GxMcp.Worker.Services
                 ["jsonpatch"] = Handle_JsonPatch,
                 ["patch"] = Handle_Patch,
                 ["analyze"] = Handle_Analyze,
+                ["introspect"] = Handle_Introspect,
                 ["buildplan"] = Handle_BuildPlan,
                 ["future"] = Handle_Future,
                 ["linter"] = Handle_Linter,
@@ -1378,6 +1383,33 @@ namespace GxMcp.Worker.Services
                 return VisualVerifyResponseHook.MaybeAttach(args, patchResp, _visualVerifyService);
             }
             return null;
+        }
+
+        /// <summary>
+        /// KB reconnaissance. depth=overview is the only level wired today (Step 4 of the
+        /// introspect plan); map/deep land with scope resolution and the bounded edge pass.
+        /// An unknown depth is rejected rather than silently downgraded to overview — a caller
+        /// that asked for deep and got overview would read a shallow answer as an exhaustive one.
+        /// </summary>
+        private string Handle_Introspect(JObject request, string method, string action, string target, string payload, JObject args)
+        {
+            if (action == "Overview") return _introspectService.Overview();
+
+            if (action == "Map" || action == "Deep")
+            {
+                return Models.McpResponse.Err(
+                    code: "DepthNotAvailable",
+                    message: string.Format("depth='{0}' is not wired yet; only depth=overview is available.", (action ?? "").ToLowerInvariant()),
+                    hint: "Call genexus_introspect depth=overview. It needs no SDK and never fails on a cold KB.",
+                    nextSteps: new JArray(
+                        Models.McpResponse.NextStep(
+                            tool: "genexus_introspect",
+                            args: new JObject { ["depth"] = "overview" },
+                            why: "Type census, container inventory, activity and the coverage block — no SDK, no object opened.")),
+                    target: target);
+            }
+
+            return null;   // fall through to the dispatcher's UnknownMethodOrAction envelope
         }
 
         private string Handle_Analyze(JObject request, string method, string action, string target, string payload, JObject args)
